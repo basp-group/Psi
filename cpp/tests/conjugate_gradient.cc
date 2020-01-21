@@ -1,5 +1,5 @@
 #include <random>
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 #include "psi/conjugate_gradient.h"
 

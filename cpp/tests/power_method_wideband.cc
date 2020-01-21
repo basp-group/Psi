@@ -2,7 +2,7 @@
 #include <random>
 #include <vector>
 #include <Eigen/Eigenvalues>
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 
 #include "psi/power_method_wideband.h"
 

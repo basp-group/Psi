@@ -2,7 +2,7 @@
 #include <numeric>
 #include <cmath>
 #include <complex>
-#include "catch.hpp"
+#include <catch2/catch.hpp>
 #include <mpi.h>
 
 #include "psi/config.h"
