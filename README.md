@@ -30,7 +30,7 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 
- ### Contributors
+ ## Contributors
 
 Psi has been developed by:
 
@@ -42,12 +42,12 @@ Psi has been developed by:
 
 Psi started life as a fork of the [Sopt](https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
 
-### References and citation
+## References and citation
 
 
-### Acknowledgements
+## Acknowledgements
 
-### License
+## License
 
 
 ```

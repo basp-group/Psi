@@ -16,13 +16,13 @@ if(Catch_FOUND)
   return()
 endif()
 
-find_path(CATCH_INCLUDE_DIR catch.hpp PATHS /usr/include ${EXTERNAL_ROOT}/include PATH_SUFFIXES catch2)
+find_path(CATCH_INCLUDE_DIR catch2/catch.hpp PATHS /usr/include ${EXTERNAL_ROOT}/include PATH_SUFFIXES catch2)
 # <package>_FIND_VERSION var dessapears after the first time this runs
 set(Catch_WANTED_VERSION ${Catch_FIND_VERSION})
 
 if(CATCH_INCLUDE_DIR)
   file(
-    STRINGS ${CATCH_INCLUDE_DIR}/catch.hpp
+    STRINGS ${CATCH_INCLUDE_DIR}/catch2/catch.hpp
     CATCH_VERSION_STRING
     REGEX "[ ]+Catch[ ]+v([0-9]*\\.[0-9]*\\.[0-9]*)"
   )
