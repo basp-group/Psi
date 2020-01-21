@@ -1,35 +1,21 @@
-include(PackageLookup)  # check for existence, or install external projects
-
-lookup_package(Eigen3 REQUIRED DOWNLOAD_BY_DEFAULT ARGUMENTS URL "https://bitbucket.org/eigen/eigen/get/3.3.5.tar.gz" MD5 "ee48cafede2f51fe33984ff5c9f48026")
+#include(PackageLookup)  # check for existence, or install external projects
 
 find_package(Eigen3 REQUIRED)
 
+find_package(Eigen3 REQUIRED)
+
+
 if(logging)
-  lookup_package(spdlog REQUIRED)
+  find_package(spdlog REQUIRED)
 endif()
 
 find_package(TIFF)
-if(examples OR regression)
+if(examples)
   if(NOT TIFF_FOUND)
     message(FATAL_ERROR "Examples and regressions require TIFF")
   endif()
 endif()
 
-if(regressions)
-  find_package(FFTW3 REQUIRED DOUBLE)
-  set(REGRESSION_ORACLE_ID "last_of_c"
-    CACHE STRING "Commmit/tag/branch againts which to run regressions")
-
-  lookup_package(Psi
-    REQUIRED DOWNLOAD_BY_DEFAULT
-    PATHS "${EXTERNAL_ROOT}"
-    NO_DEFAULT_PATH
-    ARGUMENTS
-      GIT_REPOSITORY "https://www.github.com/basp-group/Psi.git"
-      GIT_TAG ${REGRESSION_ORACLE_ID}
-      BUILD_TYPE Release
-  )
-endif()
 
 if(openmp)
   find_package(OpenMP)

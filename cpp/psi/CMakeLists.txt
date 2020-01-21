@@ -23,7 +23,7 @@ if(PSI_MPI)
 endif()
 
 add_library(psi SHARED ${sources})
-add_dependencies(psi lookup_dependencies)
+#add_dependencies(psi lookup_dependencies)
 set(version "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}.${PSI_VERSION_PATCH}")
 set(soversion "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}")
 set_target_properties(psi PROPERTIES VERSION ${version} SOVERSION ${soversion})
