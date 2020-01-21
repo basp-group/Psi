@@ -1,5 +1,5 @@
 
-# PSI
+# Psi
 
 ## Description
 
@@ -9,13 +9,13 @@ Psi is an open-source package that implements convex optimisation algorithms. It
 
 ### C++ pre-requisites and dependencies
 
-- [CMake](http://www.cmake.org/): a free software that allows cross-platform compilation
+- [CMake](http://www.cmake.org/): Program building software.
 - [tiff](http://www.libtiff.org/): Tag Image File Format library
 - [OpenMP](http://openmp.org/wp/): Optional. Parallelises operations across multiple threads.
 - [MPI](http://www.mpi-forum.org): Optional. Parallelises operations across multiple processes.
 - [Eigen 3](http://eigen.tuxfamily.org/index.php?title=Main_Page): Modern C++ linear algebra.
 - [spdlog](https://github.com/gabime/spdlog): Logging library.
-- [Catch](https://github.com/catchorg/Catch2): A C++ unit-testing framework.
+- [Catch2](https://github.com/catchorg/Catch2): A C++ unit-testing framework.
 - [google/benchmark](https://github.com/google/benchmark): Micro-benchmarking framework.
 
 ### Installing
@@ -30,7 +30,7 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
 
-### Contributors
+ ### Contributors
 
 Psi has been developed by:
 
@@ -40,10 +40,12 @@ Psi has been developed by:
 - Alex Onose
 - [Yves Wiaux](http://basp.eps.hw.ac.uk/)
 
-Psi was originally based on the [Sopt](https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
+Psi started life as a fork of the [Sopt](https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
 
 ### References and citation
 
+
+### Acknowledgements
 
 ### License
 
