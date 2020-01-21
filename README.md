@@ -34,13 +34,13 @@ make
 
 Psi has been developed by:
 
-- Adrian Jackson
+- [Adrian Jackson](https://www.epcc.ed.ac.uk/about/staff/mr-adrian-jackson)
 - Pierre-Antoine Thouvenin
 - Ming Jiang
 - Alex Onose
-- Yves Wiaux
+- [Yves Wiaux](http://basp.eps.hw.ac.uk/)
 
-Psi was originally based on the Sopt (https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
+Psi was originally based on the [Sopt](https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
 
 ### References and citation
 
