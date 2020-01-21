@@ -32,6 +32,16 @@ make
 
 ### Contributors
 
+Psi has been developed by:
+
+- Adrian Jackson
+- Pierre-Antoine Thouvenin
+- Ming Jiang
+- Alex Onose
+- Yves Wiaux
+
+Psi was originally based on the Sopt (https://github.com/basp-group/sopt) software package, developed in collaboration with UCL.
+
 ### References and citation
 
 
