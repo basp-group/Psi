@@ -1,0 +1,35 @@
+# Setup logging
+set(PSI_LOGGER_NAME "psi" CACHE STRING "NAME of the logger")
+set(PSI_COLOR_LOGGING true CACHE BOOL "Whether to add color to the log")
+if(logging)
+  set(PSI_DO_LOGGING 1)
+  set(PSI_TEST_LOG_LEVEL critical CACHE STRING "Level when logging tests")
+  set_property(CACHE PSI_TEST_LOG_LEVEL PROPERTY STRINGS
+    off critical error warn info debug trace)
+else()
+  unset(PSI_DO_LOGGING)
+  set(PSI_TEST_LOG_LEVEL off)
+endif()
+
+set(version 1.0.0)
+string(REGEX REPLACE "\\." ";" version "${PSI_VERSION}")
+list(GET version 0 PSI_VERSION_MAJOR)
+list(GET version 1 PSI_VERSION_MINOR)
+list(GET version 2 PSI_VERSION_PATCH)
+
+configure_file(psi/config.in.h "${PROJECT_BINARY_DIR}/include/psi/config.h")
+
+add_subdirectory(psi)
+if(examples)
+  # Tiff wrappers and whatnot
+  add_subdirectory(tools_for_tests)
+endif()
+if(tests)
+  add_subdirectory(tests)
+endif()
+if(examples)
+  add_subdirectory(examples)
+endif()
+if(benchmarks)
+  add_subdirectory(benchmarks)
+endif()

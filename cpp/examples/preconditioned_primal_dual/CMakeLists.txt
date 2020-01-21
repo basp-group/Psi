@@ -1,0 +1,4 @@
+add_example(ppd_inpainting inpainting.cc LIBRARIES psi tools_for_tests LABELS ppd)
+set_target_properties(example_ppd_inpainting PROPERTIES OUTPUT_NAME inpainting)
+add_example(ppd_reweighted NOTEST reweighted.cc LIBRARIES psi tools_for_tests LABELS ppd)
+set_target_properties(example_ppd_reweighted PROPERTIES OUTPUT_NAME reweighted)
