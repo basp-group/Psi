@@ -296,7 +296,6 @@ reweighted(PrimalDualTimeBlocking<SCALAR> &algo) {
 	typedef Reweighted<Algorithm> RW;
 	auto const reweightee
 	= [](Algorithm const &posq, typename RW::XVector const &x) -> typename RW::XVector {
-		PSI_HIGH_LOG("x.size() {}",x.size());
 		assert(x.size() > 0);
 		return posq.algorithm().Psi().adjoint() * x;
 	};

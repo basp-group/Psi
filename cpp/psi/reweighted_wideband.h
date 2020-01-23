@@ -282,7 +282,6 @@ operator()(ReweightedResult const &warm) {
 		}
 
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
-			PSI_HIGH_LOG("size weights {} size partial {}",result.weightsL21.size(),partial.rowwise().norm().array().size());
 			result.weightsL21 = delta / (delta + partial.rowwise().norm().array());
 			result.algo.weightsL21 = result.weightsL21;
 		}
