@@ -226,8 +226,15 @@ operator()(ReweightedResult const &warm) const {
 			PSI_HIGH_LOG("Re-weighting iteration {}/{} ", result.niters, itermax());
 			PSI_HIGH_LOG("  - delta: {}", delta);
 		}
-		if(!decomp().parallel_mpi() or decomp().my_frequencies()[0].number_of_wavelets != 0){
-			result.weights = delta / (delta + reweightee(result.algo.x).array().abs());
+
+		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
+			if(decomp().my_root_wavelet_comm().size() != 1){
+				XVector local_x;
+				local_x = decomp().my_root_wavelet_comm().broadcast(result.algo.x, decomp().global_comm().root_id());
+				result.weights = delta / (delta + reweightee(local_x).array().abs());
+			}else{
+				result.weights = delta / (delta + reweightee(result.algo.x).array().abs());
+			}
 			result.algo.l1_weights = result.weights;
 			result.algo.delta = delta;
 			result.algo.current_reweighting_iter = result.niters;
@@ -289,6 +296,7 @@ reweighted(PrimalDualTimeBlocking<SCALAR> &algo) {
 	typedef Reweighted<Algorithm> RW;
 	auto const reweightee
 	= [](Algorithm const &posq, typename RW::XVector const &x) -> typename RW::XVector {
+		PSI_HIGH_LOG("x.size() {}",x.size());
 		assert(x.size() > 0);
 		return posq.algorithm().Psi().adjoint() * x;
 	};

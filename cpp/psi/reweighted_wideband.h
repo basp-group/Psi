@@ -287,6 +287,11 @@ operator()(ReweightedResult const &warm) {
 			result.algo.weightsL21 = result.weightsL21;
 		}
 
+		if(decomp().parallel_mpi()){
+			//! Copy the global weights collected by the root to all processes so they can update their weights for subsequent runs.
+			decomp().template distribute_l21_weights<Vector<Real>>(result.weightsL21, result.weightsL21, result.algo.image_size);
+		}
+
 		decomp().global_comm().barrier();
 		temptime = clock() - temptime;
 		time2 += temptime;

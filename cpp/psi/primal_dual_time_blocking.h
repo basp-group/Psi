@@ -392,8 +392,8 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 	}
 
 	// x_bar should be on the wavelet process(es)
-	if(decomp().parallel_mpi() and decomp().my_frequencies()[0].number_of_wavelets != 0){
-		x_bar =  decomp().my_frequencies()[0].wavelet_comm.broadcast(x_bar, decomp().global_comm().root_id());
+	if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
+		x_bar =  decomp().my_root_wavelet_comm().broadcast(x_bar, decomp().global_comm().root_id());
 	}
 
 	Matrix<t_complex> x_hat;
@@ -529,7 +529,7 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 
 	Matrix<t_complex> out_hat;
 
-	if(!decomp().parallel_mpi() or decomp().my_frequencies()[0].number_of_wavelets != 0){
+	if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 		// Done on the wavelet processes only.
 		// When wavelet parallelised each process needs a copy of x_bar and their portions of Psi and u
 		// u_t = u_t-1 + Psi_dagger * x_bar_t-1 - l1norm_prox(u_t-1 + Psi_dagger * x_bar_t-1)
@@ -545,8 +545,8 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 
 		// Psi_u now needs to be communicated to the root process
 		// COMMUNICATION
-		if(decomp().parallel_mpi() and decomp().my_frequencies()[0].number_of_wavelets != 0){
-			decomp().my_frequencies()[0].wavelet_comm.distributed_sum(Psi_u,decomp().global_comm().root_id());
+		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
+			decomp().my_root_wavelet_comm().distributed_sum(Psi_u,decomp().global_comm().root_id());
 		}
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
@@ -645,15 +645,15 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 	std::pair<Real, Real> objectives;
 
 	if(full_convergence_test){
-		if(!decomp().parallel_mpi() or decomp().my_frequencies()[0].number_of_wavelets != 0){
-			if(decomp().my_frequencies()[0].wavelet_comm.size() != 1){
-				out = decomp().my_frequencies()[0].wavelet_comm.broadcast(out, decomp().global_comm().root_id());
+		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
+			if(decomp().my_root_wavelet_comm().size() != 1){
+				out = decomp().my_root_wavelet_comm().broadcast(out, decomp().global_comm().root_id());
 			}
 			Real temp_objective = psi::l1_norm(Psi().adjoint() * out, l1_proximal_weights());
-			if(decomp().parallel_mpi() and decomp().my_frequencies()[0].wavelet_comm.size() != 1){
-				decomp().my_frequencies()[0].wavelet_comm.distributed_sum(&temp_objective,decomp().global_comm().root_id());
+			if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1){
+				decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().global_comm().root_id());
 			}
-			if(!decomp().parallel_mpi() || decomp().global_comm().is_root()){
+			if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 				objectives = {temp_objective, 0.};
 			}
 		}
@@ -701,13 +701,13 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 			objectives.second = objectives.first;
 
 			// Could be parallelised with the wavelet processes but that would require out to be distributed here
-			if(!decomp().parallel_mpi() or decomp().my_frequencies()[0].number_of_wavelets != 0){
-				if(decomp().my_frequencies()[0].wavelet_comm.size() != 1){
-					out = decomp().my_frequencies()[0].wavelet_comm.broadcast(out, decomp().global_comm().root_id());
+			if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
+				if(decomp().my_root_wavelet_comm().size() != 1){
+					out = decomp().my_root_wavelet_comm().broadcast(out, decomp().global_comm().root_id());
 				}
 				Real temp_objective = psi::l1_norm(Psi().adjoint() * out, l1_proximal_weights());
-				if(decomp().parallel_mpi() and decomp().my_frequencies()[0].wavelet_comm.size() != 1){
-					decomp().my_frequencies()[0].wavelet_comm.distributed_sum(&temp_objective,decomp().global_comm().root_id());
+				if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1){
+					decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().global_comm().root_id());
 				}
 				if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 					objectives.first = temp_objective;

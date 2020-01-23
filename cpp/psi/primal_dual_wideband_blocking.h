@@ -79,6 +79,7 @@ public:
 		Real kappa2;
 		Real kappa3;
 		Real delta;
+		int image_size;
 		int current_reweighting_iter;
 	};
 
@@ -287,6 +288,7 @@ public:
 		result.kappa3 = kappa3();
 		result.delta = delta();
 		result.current_reweighting_iter = current_reweighting_iter();
+		result.image_size = image_size();
 
 
 		static_cast<Diagnostic &>(result) = operator()(result.x, result.x, result.p, result.u, result.v, result.x_bar,  std::get<5>(guess), result.epsilon, result.weightsL21, result.weightsNuclear);
@@ -318,6 +320,7 @@ public:
 		result.kappa3 = warmstart.kappa3;
 		result.delta = warmstart.delta;
 		result.current_reweighting_iter = warmstart.current_reweighting_iter;
+		result.image_size = warmstart.image_size;
 
 		kappa1_ = result.kappa1;
 		kappa2_ = result.kappa2;
@@ -325,6 +328,7 @@ public:
 
 		delta_ = result.delta;
 		current_reweighting_iter_ = result.current_reweighting_iter;
+		image_size_ = result.image_size;
 
 		static_cast<Diagnostic &>(result) = operator()(result.x, warmstart.x, result.p, result.u, result.v, result.x_bar, warmstart.residual, result.epsilon, result.weightsL21, result.weightsNuclear);
 		return result;
