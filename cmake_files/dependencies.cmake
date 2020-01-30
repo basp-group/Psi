@@ -37,3 +37,14 @@ if(mpi)
         find_package(MPI)
 endif()
 set(PSI_MPI ${MPI_FOUND})
+
+if(MKL_FOUND AND mkl)
+    set(PSI_EIGEN_MKL 1) # This will go into config.h
+    set(EIGEN_USE_MKL_ALL 1) # This will go into config.h - it makes Eigen use MKL
+    include_directories(${MKL_INCLUDE_DIR})
+    list(APPEND PSI_ADDITIONAL_LIBRARIES ${MKL_LIBRARIES})
+else()
+    set(PSI_EIGEN_MKL 0)
+    set(EIGEN_USE_MKL_ALL 0)
+endif()
+

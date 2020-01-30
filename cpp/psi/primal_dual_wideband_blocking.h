@@ -543,6 +543,11 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 
 	time3 = clock();
 
+	time31 = 0;
+	time32 = 0;
+	time33 = 0;
+	time34 = 0;
+
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		time31 = clock();
 		t_Matrix tmp = p + x_bar;
@@ -738,7 +743,6 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 #pragma omp parallel for default(shared)
 #endif
 	for(int f=0; f<decomp().my_number_of_frequencies(); f++){
-
 		Git_v[f] = std::vector<t_Vector>(target()[f].size());
 		for (int t=0; t<decomp().my_frequencies()[f].number_of_time_blocks; ++t){   // assume the data are order per blocks per channel
 			t_Vector temp;
@@ -928,7 +932,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 
 	time15 = clock() - time15;
 
-	PSI_LOW_LOG("{} InTime: 1: {} 2: {} 3: {} ({} {} {} {}) 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {} 12: {} 13: {} 14: {} 15: {}",
+	PSI_HIGH_LOG("{} InTime: 1: {} 2: {} 3: {} ({} {} {} {}) 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {} 12: {} 13: {} 14: {} 15: {}",
 			decomp().global_comm().rank(),
 			(float)time1/CLOCKS_PER_SEC,
 			(float)time2/CLOCKS_PER_SEC,

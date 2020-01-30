@@ -17,6 +17,7 @@ option(examples       "Enable Examples"                        on)
 option(logging        "Enable logging"                         on)
 option(openmp         "Enable OpenMP"                          on)
 option(mpi 	      "Enable MPI" 			       on)
+option(mkl            "Use MKL for Eigen acceleration"         on)
 
 if(tests)
   enable_testing()

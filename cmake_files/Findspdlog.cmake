@@ -1,4 +1,4 @@
-# - Try to find catch framework
+# - Try to find spdlog framework
 if(spdlog_FOUND)
   return()
 endif()

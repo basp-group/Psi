@@ -197,7 +197,7 @@ void ForwardBackward<SCALAR>::iteration_step(t_Vector &out, t_Vector &residual, 
 	// v_t = l2ball_prox(v_t-1 - mu*Ui*(v_t-1 - z))
 	t_Vector temp = prev_sol - mu*(Ui().array()*(prev_sol - target()).array()).matrix();
 	out = l2ball_proximal(0, temp - l2_ball_center()) + l2_ball_center();
-	residual = out - target();
+	residual= out - target();
 }
 
 template <class SCALAR>
