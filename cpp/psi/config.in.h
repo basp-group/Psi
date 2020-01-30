@@ -16,6 +16,10 @@
 //! True if using MPI
 #cmakedefine PSI_MPI
 
+// Whether Eigen will use MKL (if MKL was found and PSI_EIGEN_MKL is enabled in CMake)
+#cmakedefine PSI_EIGEN_MKL
+#cmakedefine EIGEN_USE_MKL_ALL 
+
 // figures out available basic types
 #cmakedefine PSI_CHAR_ARCH
 #cmakedefine PSI_LONG_ARCH
