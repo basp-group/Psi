@@ -23,7 +23,6 @@ if(PSI_MPI)
 endif()
 
 add_library(psi SHARED ${sources})
-#add_dependencies(psi lookup_dependencies)
 set(version "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}.${PSI_VERSION_PATCH}")
 set(soversion "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}")
 set_target_properties(psi PROPERTIES VERSION ${version} SOVERSION ${soversion})
@@ -37,6 +36,11 @@ if(TIFF_FOUND)
   target_link_libraries(psi ${TIFF_LIBRARY})
   target_include_directories(psi SYSTEM PUBLIC ${TIFF_INCLUDE_DIR})
 endif()
+
+if(MKL_FOUND)
+  target_link_libraries(psi ${MKL_LIBRARIES})
+endif()
+
 # Add spdlog as direct dependency if not downloaded
 if(SPDLOG_INCLUDE_DIR AND NOT spdlog_BUILT_AS_EXTERNAL_PROJECT)
   target_include_directories(psi PUBLIC $<BUILD_INTERFACE:${SPDLOG_INCLUDE_DIR}>)

@@ -2,8 +2,6 @@
 
 find_package(Eigen3 REQUIRED)
 
-find_package(Eigen3 REQUIRED)
-
 
 if(logging)
   find_package(spdlog REQUIRED)
@@ -38,13 +36,15 @@ if(mpi)
 endif()
 set(PSI_MPI ${MPI_FOUND})
 
+set(PSI_EIGEN_MKL FALSE)
+# Find MKL
+find_package(MKL)
+
 if(MKL_FOUND AND mkl)
     set(PSI_EIGEN_MKL 1) # This will go into config.h
     set(EIGEN_USE_MKL_ALL 1) # This will go into config.h - it makes Eigen use MKL
     include_directories(${MKL_INCLUDE_DIR})
-    list(APPEND PSI_ADDITIONAL_LIBRARIES ${MKL_LIBRARIES})
 else()
     set(PSI_EIGEN_MKL 0)
     set(EIGEN_USE_MKL_ALL 0)
 endif()
-
