@@ -210,9 +210,7 @@ template <class ALGORITHM>
 typename Reweighted<ALGORITHM>::ReweightedResult Reweighted<ALGORITHM>::
 operator()(ReweightedResult const &warm) {
 
-	clock_t temptime, time0, time1, time2, time3, time4;
-
-	time0 = 0;
+	double temptime, time1, time2, time3, time4;
 	time1 = 0;
 	time2 = 0;
 	time3 = 0;
@@ -247,14 +245,10 @@ operator()(ReweightedResult const &warm) {
 
 		psi::Matrix<t_complex> partial;
 
-		temptime = clock();
 
-		decomp().global_comm().barrier();
-		temptime = clock() - temptime;
-		time0 += temptime;
-
-		temptime = clock();
-
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 			psi::Matrix<t_complex> local_x;
 			if(decomp().my_root_wavelet_comm().size() != 1){
@@ -268,11 +262,14 @@ operator()(ReweightedResult const &warm) {
 			}
 		}
 
-		decomp().global_comm().barrier();
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time1 += temptime;
+#endif
 
-		temptime = clock();
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 			result.weightsNuclear = delta / (delta + reweighteeNuclear(result.algo.x).array().abs());
@@ -291,20 +288,24 @@ operator()(ReweightedResult const &warm) {
 			decomp().template distribute_l21_weights<Vector<Real>>(result.weightsL21, result.weightsL21, result.algo.image_size);
 		}
 
-		decomp().global_comm().barrier();
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time2 += temptime;
+#endif
 
-		temptime = clock();
-
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 		result.algo = algo(result.algo);
 
-		decomp().global_comm().barrier();
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time3 += temptime;
+#endif
 
-		temptime = clock();
-
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 		bool good_result = false;
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
@@ -326,10 +327,10 @@ operator()(ReweightedResult const &warm) {
 		}
 
 
-		decomp().global_comm().barrier();
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time4 += temptime;
-
+#endif
 
 	}
 	// result is always good if no convergence function is defined
@@ -341,13 +342,9 @@ operator()(ReweightedResult const &warm) {
 		}
 	}
 
-	PSI_HIGH_LOG("{} ReweightTime: 0: {} 1: {} 2: {} 3: {} 4: {}",
+	PSI_HIGH_LOG("{} ReweightTime: 1: {} 2: {} 3: {} 4: {}",
 			decomp().global_comm().rank(),
-			(float)time0/CLOCKS_PER_SEC,
-			(float)time1/CLOCKS_PER_SEC,
-			(float)time2/CLOCKS_PER_SEC,
-			(float)time3/CLOCKS_PER_SEC,
-			(float)time4/CLOCKS_PER_SEC);
+			(float)time1, (float)time2, (float)time3, (float)time4);
 
 	return result;
 }

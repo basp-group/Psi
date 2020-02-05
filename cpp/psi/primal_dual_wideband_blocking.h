@@ -430,7 +430,7 @@ public:
 			PSI_WARN("No convergence function was provided: algorithm will run for {} steps", itermax());
 		if(l2ball_epsilon_guess.size() != target().size())
 			PSI_THROW("target and l2ball_epsilon have inconsistent sizes");
-		if((!decomp().parallel_mpi() or decomp().global_comm().is_root()) and (l21_proximal_weights().size() != image_size()*levels()[0])){
+		if((!decomp().parallel_mpi() or decomp().global_comm().is_root()) and (l21_proximal_weights().size() != image_size()*decomp().my_number_of_root_wavelets())){
 			PSI_THROW("l21 proximal weights not the correct size");
 		}
 		if((!decomp().parallel_mpi() or decomp().global_comm().is_root()) and (nuclear_proximal_weights().size() != n_channels()))
@@ -450,9 +450,11 @@ template <class SCALAR>
 void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vector<std::vector<t_Vector>> &residual, t_Matrix &p, t_Matrix &u, std::vector<std::vector<t_Vector>> &v, t_Matrix &x_bar, Vector<Real> &w_l21, Vector<Real> &w_nuclear) {
 
 	t_Matrix prev_sol;
-	clock_t time1, time2, time3, time31, time32, time33, time34, time4, time5, time6, time7, time8, time9, time10, time11, time12, time13, time14, time15;
+	double time1, time2, time3, time31, time32, time33, time34, time4, time5, time6, time7, time8, time9, time10, time11, time12, time13, time14, time15;
 
-	time1 = clock();
+#ifdef PSI_OPENMP
+	time1 = omp_get_wtime();
+#endif
 	// Calculate the fourier indices for each Phi and then collect them on the frequency root
 	// to allow only the specific x_hat and out_hat each process requires to be broadcast to them.
 	// This is only done once, because the indices never change throughout a given simulation.
@@ -517,15 +519,21 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 
 	}
 
-	time1 = clock() - time1;
+#ifdef PSI_OPENMP
+	time1 = omp_get_wtime() - time1;
+#endif
 
-	time2 = clock();
+#ifdef PSI_OPENMP
+	time2 = omp_get_wtime();
+#endif
 
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		prev_sol = out;
 	}
 
-	time2 = clock() - time2;
+#ifdef PSI_OPENMP
+	time2 = omp_get_wtime() - time2;
+#endif
 
 	// prev_sol needs to be distributed, as does out here. Only needs distributed once, then should be able to
 	// update every iteration.
@@ -541,7 +549,9 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	// This requires a distribution and gathering of x_bar before the first iteration and also a gathering of x_bar at the
 	// end of the iteration.
 
-	time3 = clock();
+#ifdef PSI_OPENMP
+	time3 = omp_get_wtime();
+#endif
 
 	time31 = 0;
 	time32 = 0;
@@ -549,23 +559,41 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	time34 = 0;
 
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
-		time31 = clock();
+#ifdef PSI_OPENMP
+		time31 = omp_get_wtime();
+#endif
 		t_Matrix tmp = p + x_bar;
-		time31 = clock() - time31;
-		time32 = clock();
+#ifdef PSI_OPENMP
+		time31 = omp_get_wtime() - time31;
+#endif
+#ifdef PSI_OPENMP
+		time32 = omp_get_wtime();
+#endif
 		t_Matrix p_prox(out.rows(), out.cols());
-		time32 = clock() - time32;
+#ifdef PSI_OPENMP
+		time32 = omp_get_wtime() - time32;
+#endif
 
-		time33 = clock();
+#ifdef PSI_OPENMP
+		time33 = omp_get_wtime();
+#endif
 		proximal::nuclear_norm(p_prox, tmp, w_nuclear);
-		time33 = clock() - time33;
+#ifdef PSI_OPENMP
+		time33 = omp_get_wtime() - time33;
+#endif
 		// Here p is local to 1 process
-		time34 = clock();
+#ifdef PSI_OPENMP
+		time34 = omp_get_wtime();
+#endif
 		p = tmp - p_prox;
-		time34 = clock() - time34;
+#ifdef PSI_OPENMP
+		time34 = omp_get_wtime() - time34;
+#endif
 	}
 
-	time3 = clock() - time3;
+#ifdef PSI_OPENMP
+	time3 = omp_get_wtime() - time3;
+#endif
 
 	// distributed p here
 	// std::cout << p << "\n"; // ok
@@ -578,9 +606,11 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	// Psi is the same for each band
 	// x_bar needs distributed
 
-	time4 = clock();
+#ifdef PSI_OPENMP
+	time4 = omp_get_wtime();
+#endif
 
-	// TODO: Strictly speaking temp1_u only needs to exist on wavelet processes for each process. To save memory, refactoring this
+	// TODO: Strictly speaking temp1_u only needs to exist on wavelet processes for each frequency. To save memory, refactoring this
 	// to only create it as the size of frequencies I am a wavelet process in would be sensible.
 	t_Matrix temp1_u(image_size()*levels()[0], decomp().my_number_of_frequencies());
 	t_Matrix x_bar_local(image_size(), decomp().my_number_of_frequencies());
@@ -608,10 +638,12 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time4 = clock() - time4;
-
-	time5 = clock();
-
+#ifdef PSI_OPENMP
+	time4 = omp_get_wtime() - time4;
+#endif
+#ifdef PSI_OPENMP
+	time5 = omp_get_wtime();
+#endif
 	// At the moment l21_norm can only be split along rows, and the above calculation of temp1_u splits along columns
 	// So we need to reduce temp1_u here to allow the l21 norm to be calculated below
 	t_Matrix u_local(image_size()*levels()[0], decomp().my_number_of_frequencies());
@@ -635,9 +667,13 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		decomp().template distribute_frequency_data<t_Matrix, Scalar>(u_local, u, true);
 	}
 
-	time5 = clock() - time5;
+#ifdef PSI_OPENMP
+	time5 = omp_get_wtime() - time5;
+#endif
 
-	time6 = clock();
+#ifdef PSI_OPENMP
+	time6 = omp_get_wtime();
+#endif
 
 	Matrix<t_complex> temp2_u(image_size(), decomp().my_number_of_frequencies());
 	// temp2_u can be done in parallel but will require U to be scattered at this point.
@@ -661,7 +697,9 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time6 = clock() - time6;
+#ifdef PSI_OPENMP
+	time6 = omp_get_wtime() - time6;
+#endif
 
 	std::vector<std::vector<Eigen::SparseMatrix<t_complex>>> x_hat_sparse(decomp().my_number_of_frequencies());
 	for(int f=0; f<decomp().my_number_of_frequencies(); f++){
@@ -669,8 +707,9 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	}
 	std::vector<Eigen::SparseMatrix<t_complex>> x_hat_global;
 
-	time7 = clock();
-
+#ifdef PSI_OPENMP
+	time7 = omp_get_wtime();
+#endif
 	// TODO Make sure x_bar is distributed to frequency roots here
 	std::vector<Matrix<t_complex>> x_hat(decomp().my_number_of_frequencies());
 	int freq_root_count = 0;
@@ -684,14 +723,18 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time7 = clock() - time7;
+#ifdef PSI_OPENMP
+	time7 = omp_get_wtime() - time7;
+#endif
 
 	int my_freq_index = 0;
 	int root_freq_index = 0;
 
 	int shapes[decomp().global_number_of_frequencies()][global_max_block_number][3];
 
-	time8 = clock();
+#ifdef PSI_OPENMP
+	time8 = omp_get_wtime();
+#endif
 
 	// Send x_hat from frequency root to frequency time block owners.
 	for (int f=0; f<decomp().my_number_of_frequencies(); ++f){ //frequency channels
@@ -733,11 +776,15 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time8 = clock() - time8;
+#ifdef PSI_OPENMP
+	time8 = omp_get_wtime() - time8;
+#endif
 
 	std::vector<std::vector<t_Vector>> Git_v(decomp().my_number_of_frequencies());
 
-	time9 = clock();
+#ifdef PSI_OPENMP
+	time9 = omp_get_wtime();
+#endif
 
 #ifdef PSI_OPENMP
 #pragma omp parallel for default(shared)
@@ -768,9 +815,13 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time9 = clock() - time9;
+#ifdef PSI_OPENMP
+	time9 = omp_get_wtime() - time9;
+#endif
 
-	time10 = clock();
+#ifdef PSI_OPENMP
+	time10 = omp_get_wtime();
+#endif
 
 
 	// Update dual variable v (data fitting term)
@@ -798,8 +849,9 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time10 = clock() - time10;
-
+#ifdef PSI_OPENMP
+	time10 = omp_get_wtime() - time10;
+#endif
 	// Update primal variable x
 	// Can be parallelised but needs P to be distributed
 	// When parallelised in time we need to do the local out.col(l) per time instance and then reduce to a single column per frequency, then reduce to the master process.
@@ -814,7 +866,9 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	Matrix<t_complex> global_temp2_v;
 	Matrix<t_complex> global_temp2_u;
 
-	time11 = clock();
+#ifdef PSI_OPENMP
+	time11 = omp_get_wtime();
+#endif
 
 	if(decomp().global_comm().is_root()){
 		global_temp2_v = Matrix<t_complex>(out.rows(), out.cols());
@@ -825,9 +879,13 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	decomp().template collect_frequency_root_data<t_complex>(temp2_v, global_temp2_v);
 
 
-	time11 = clock() - time11;
+#ifdef PSI_OPENMP
+	time11 = omp_get_wtime() - time11;
+#endif
 
-	time12 = clock();
+#ifdef PSI_OPENMP
+	time12 = omp_get_wtime();
+#endif
 
 	if(decomp().global_comm().is_root()){
 		out = prev_sol - tau()*(kappa1()*p + global_temp2_u*kappa2() + global_temp2_v*kappa3());
@@ -837,9 +895,13 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		x_bar = 2*out - prev_sol;
 	}
 
-	time12 = clock() - time12;
+#ifdef PSI_OPENMP
+	time12 = omp_get_wtime() - time12;
+#endif
 
-	time13 = clock();
+#ifdef PSI_OPENMP
+	time13 = omp_get_wtime();
+#endif
 
 	std::vector<std::vector<Eigen::SparseMatrix<t_complex>>> out_hat_sparse(decomp().my_number_of_frequencies());
 	for(int f=0; f<decomp().my_number_of_frequencies(); f++){
@@ -862,14 +924,17 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time13 = clock() - time13;
+#ifdef PSI_OPENMP
+	time13 = omp_get_wtime() - time13;
+#endif
 
 	// TODO Optimisation to send everything at once rather than one frequency at a time
 	//if(decomp().global_comm().is_root()){
 	//	out_hat_global = std::vector<std::vector<Eigen::SparseMatrix<t_complex>>>(decomp().global_number_of_frequencies());
 	//}
-
-	time14 = clock();
+#ifdef PSI_OPENMP
+	time14 = omp_get_wtime();
+#endif
 
 	my_freq_index = 0;
 
@@ -914,9 +979,13 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time14 = clock() - time14;
+#ifdef PSI_OPENMP
+	time14 = omp_get_wtime() - time14;
+#endif
 
-	time15 = clock();
+#ifdef PSI_OPENMP
+	time15 = omp_get_wtime();
+#endif
 
 	// Update the residue
 	// Can be parallelised
@@ -930,29 +999,16 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		}
 	}
 
-	time15 = clock() - time15;
+#ifdef PSI_OPENMP
+	time15 = omp_get_wtime() - time15;
+#endif
 
 	PSI_HIGH_LOG("{} InTime: 1: {} 2: {} 3: {} ({} {} {} {}) 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {} 12: {} 13: {} 14: {} 15: {}",
-			decomp().global_comm().rank(),
-			(float)time1/CLOCKS_PER_SEC,
-			(float)time2/CLOCKS_PER_SEC,
-			(float)time3/CLOCKS_PER_SEC,
-			(float)time31/CLOCKS_PER_SEC,
-			(float)time32/CLOCKS_PER_SEC,
-			(float)time33/CLOCKS_PER_SEC,
-			(float)time34/CLOCKS_PER_SEC,
-			(float)time4/CLOCKS_PER_SEC,
-			(float)time5/CLOCKS_PER_SEC,
-			(float)time6/CLOCKS_PER_SEC,
-			(float)time7/CLOCKS_PER_SEC,
-			(float)time8/CLOCKS_PER_SEC,
-			(float)time9/CLOCKS_PER_SEC,
-			(float)time10/CLOCKS_PER_SEC,
-			(float)time11/CLOCKS_PER_SEC,
-			(float)time12/CLOCKS_PER_SEC,
-			(float)time13/CLOCKS_PER_SEC,
-			(float)time14/CLOCKS_PER_SEC,
-			(float)time15/CLOCKS_PER_SEC);
+			decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
+			(float)time31, (float)time32, (float)time33, (float)time34, (float)time4,
+			(float)time5, (float)time6, (float)time7, (float)time8, (float)time9,
+			(float)time10, (float)time11, (float)time12, (float)time13, (float)time14,
+			(float)time15);
 
 }
 
@@ -961,7 +1017,7 @@ template <class SCALAR>
 typename PrimalDualWidebandBlocking<SCALAR>::Diagnostic PrimalDualWidebandBlocking<SCALAR>::
 operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &u_guess, std::vector<std::vector<t_Vector>> &v_guess, t_Matrix &x_bar_guess, std::vector<std::vector<t_Vector>> const &res_guess, Vector<Vector<Real>> &l2ball_epsilon_guess, Vector<Real> &l21_proximal_weights_guess, Vector<Real> &nuclear_proximal_weights_guess) {
 
-	clock_t temptime, time1, time2, time3, time4, time5, time6, time7, time8, time9, time10, time11;
+	double temptime, time1, time2, time3, time4, time5, time6, time7, time8, time9, time10, time11;
 
 	time1 = 0;
 	time2 = 0;
@@ -990,9 +1046,9 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 
 	out = x_guess;
 
-	decomp().global_comm().barrier();
-
-	time1 = clock();
+#ifdef PSI_OPENMP
+	time1 = omp_get_wtime();
+#endif
 
 	l2ball_epsilon_ = l2ball_epsilon_guess;
 	l21_proximal_weights_ = l21_proximal_weights_guess;
@@ -1034,13 +1090,15 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		return Y;
 	};
 
-	decomp().global_comm().barrier();
-
-	time1 = clock() - time1;
+#ifdef PSI_OPENMP
+	time1 = omp_get_wtime() - time1;
+#endif
 
 	std::pair<Real, Real> objectives;
 
-	time2 = clock();
+#ifdef PSI_OPENMP
+	time2 = omp_get_wtime();
+#endif
 
 	t_Matrix partial;
 	Real partial_sum;
@@ -1059,11 +1117,12 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		}
 	}
 
-	decomp().global_comm().barrier();
-
-	time2 = clock() - time2;
-
-	time3 = clock();
+#ifdef PSI_OPENMP
+	time2 = omp_get_wtime() - time2;
+#endif
+#ifdef PSI_OPENMP
+	time3 = omp_get_wtime();
+#endif
 
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		// This can be parallelised, it would have to be done across the frequency 0 wavelet workers, but then they'd need to know their respective columns
@@ -1072,11 +1131,12 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		objectives.second = 0.;
 	}
 
-	decomp().global_comm().barrier();
-
-	time3 = clock() - time3;
-
-	time4 = clock();
+#ifdef PSI_OPENMP
+	time3 = omp_get_wtime() - time3;
+#endif
+#ifdef PSI_OPENMP
+	time4 = omp_get_wtime();
+#endif
 
 	Vector<Vector<Real>> residual_norm = Vector<Vector<Real>>(decomp().my_number_of_frequencies());
 	for(int f=0; f<decomp().my_number_of_frequencies(); f++){
@@ -1099,9 +1159,9 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		w_nuclear = nuclear_proximal_weights()/kappa1();
 	}
 
-	decomp().global_comm().barrier();
-
-	time4 = clock() - time4;
+#ifdef PSI_OPENMP
+	time4 = omp_get_wtime() - time4;
+#endif
 
 	for(; niters < itermax(); ++niters) {
 
@@ -1112,17 +1172,20 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 			PSI_HIGH_LOG("    - Iteration {}/{}", niters, itermax());
 		}
 
-		temptime = clock();
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 
 		iteration_step(out, residual, p_guess, u_guess, v_guess, x_bar_guess, w_l21, w_nuclear);
 
-		decomp().global_comm().barrier();
-
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time5 += temptime;
+#endif
 
-		temptime = clock();
-
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 		for(int f=0; f<decomp().my_number_of_frequencies(); ++f){
 			for(int t=0;t<decomp().my_frequencies()[f].number_of_time_blocks;t++){
 				residual_norm[f][t] = residual[f][t].stableNorm();
@@ -1135,12 +1198,14 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		}
 		decomp().template collect_residual_norms<Real>(residual_norm, total_residual_norms);
 
-		decomp().global_comm().barrier();
-
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time6 += temptime;
+#endif
 
-		temptime = clock();
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 			t_Matrix local_out;
@@ -1157,10 +1222,10 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 			}
 		}
 
-		decomp().global_comm().barrier();
-
-		temptime = clock() - temptime;
-		time7 += temptime;
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime() - temptime;
+			time7 += temptime;
+#endif
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 
@@ -1168,26 +1233,34 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 				PSI_MEDIUM_LOG("      - Sum of residuals[{}]: {}", f, total_residual_norms[f].sum());
 			}
 
-			temptime = clock();
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime();
+#endif
 
 			// update objective function
 			objectives.second = objectives.first;
 
-			temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime() - temptime;
 			time8 += temptime;
+#endif
 
-			temptime = clock();
-
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime();
+#endif
 			objectives.first = psi::nuclear_norm(out, nuclear_proximal_weights()) + partial_sum;
 			t_real const relative_objective = std::abs(objectives.first - objectives.second) / objectives.first;
 			PSI_HIGH_LOG("    - objective: obj value = {}, rel obj = {}", objectives.first,
 					relative_objective);
 
-			temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime() - temptime;
 			time9 += temptime;
+#endif
 
-			temptime = clock();
-
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime();
+#endif
 			Real total_residual_norm = 0;
 			Real l2ball_epsilon_norm = 0;
 			for(int f=0; f<decomp().global_number_of_frequencies(); f++){
@@ -1199,8 +1272,10 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 			total_residual_norm = std::sqrt(total_residual_norm);
 			l2ball_epsilon_norm = std::sqrt(l2ball_epsilon_norm);
 
-			temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+			temptime = omp_get_wtime() - temptime;
 			time10 += temptime;
+#endif
 
 			PSI_HIGH_LOG("      -  residual norm = {}, residual convergence = {}", total_residual_norm, residual_convergence() * (l2ball_epsilon_norm));
 
@@ -1211,9 +1286,6 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 			converged = user and res and rel;
 
 		}
-
-		decomp().global_comm().barrier();
-
 
 		if(decomp().parallel_mpi()){
 			int temp_converged;
@@ -1268,8 +1340,9 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		// Need to broadcast rel_x_check here
 		rel_x_check = decomp().global_comm().broadcast(rel_x_check, decomp().global_comm().root_id());
 
-		temptime = clock();
-
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime();
+#endif
 		// update l2ball_epsilon (if appropriate, only for real data -> add a boolean variable to control this feature)
 		// As we already have out gathered at this point, we can just do this in serial. If the out nuclear norm is
 		// parallelised in the future we can parallelise this.
@@ -1303,25 +1376,16 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 			}
 		}
 
-		decomp().global_comm().barrier();
-
-		temptime = clock() - temptime;
+#ifdef PSI_OPENMP
+		temptime = omp_get_wtime() - temptime;
 		time11 += temptime;
+#endif
 	}
 
 	PSI_HIGH_LOG("{} OutTime: 1: {} 2: {} 3: {} 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {}",
-			decomp().global_comm().rank(),
-			(float)time1/CLOCKS_PER_SEC,
-			(float)time2/CLOCKS_PER_SEC,
-			(float)time3/CLOCKS_PER_SEC,
-			(float)time4/CLOCKS_PER_SEC,
-			(float)time5/CLOCKS_PER_SEC,
-			(float)time6/CLOCKS_PER_SEC,
-			(float)time7/CLOCKS_PER_SEC,
-			(float)time8/CLOCKS_PER_SEC,
-			(float)time9/CLOCKS_PER_SEC,
-			(float)time10/CLOCKS_PER_SEC,
-			(float)time11/CLOCKS_PER_SEC);
+			decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
+			(float)time4, (float)time5, (float)time6, (float)time7, (float)time8,
+			(float)time9, (float)time10, (float)time11);
 
 
 
