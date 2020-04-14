@@ -393,6 +393,7 @@ IOStatus IO<T>::restore_wideband_with_distribute(psi::mpi::Decomposition decomp,
 
 	psi::io::IOStatus restore_status = IOStatus::Success;
 	Vector<Vector<Real>> total_epsilons;
+	Vector<Real> total_l21_weights;
 
 	if(!decomp.parallel_mpi() or decomp.global_comm().is_root()){
 
@@ -400,7 +401,7 @@ IOStatus IO<T>::restore_wideband_with_distribute(psi::mpi::Decomposition decomp,
 		for(int i=0; i<decomp.global_number_of_frequencies(); i++){
 			total_epsilons(i) = Vector<Real>(decomp.frequencies()[i].number_of_time_blocks);
 		}
-		psi::io::IOStatus restore_status = restore_wideband(checkpoint_filename, out, total_epsilons, l21_weights, nuclear_weights, kappa1, kappa2, kappa3, frequencies, image_size, delta, current_reweighting_iter);
+		psi::io::IOStatus restore_status = restore_wideband(checkpoint_filename, out, total_epsilons, total_l21_weights, nuclear_weights, kappa1, kappa2, kappa3, frequencies, image_size, delta, current_reweighting_iter);
 		if(restore_status != psi::io::IOStatus::Success){
 			if(restore_status == psi::io::IOStatus::WrongImageSize){
 				PSI_HIGH_LOG("Problem restoring from checkpoint. Restored image size is different to target size. You probably restored an incorrect restore file.");
@@ -411,7 +412,10 @@ IOStatus IO<T>::restore_wideband_with_distribute(psi::mpi::Decomposition decomp,
 		}
 	}
 
-	decomp.template distribute_epsilons_wideband_blocking<Vector<Vector<t_real>>>(epsilons, total_epsilons);
+	decomp.template distribute_epsilons_wideband_blocking<Vector<Vector<Real>>>(epsilons, total_epsilons);
+	l21_weights = Vector<Real>(image_size*decomp.my_number_of_root_wavelets());
+	decomp.template distribute_l21_weights<Vector<Real>>(l21_weights, total_l21_weights, image_size);
+
 	kappa1 = decomp.global_comm().broadcast(kappa1, decomp.global_comm().root_id());
 	kappa2 = decomp.global_comm().broadcast(kappa2, decomp.global_comm().root_id());
 	kappa3 = decomp.global_comm().broadcast(kappa3, decomp.global_comm().root_id());
