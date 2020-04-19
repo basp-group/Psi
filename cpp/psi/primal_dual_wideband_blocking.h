@@ -763,6 +763,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 			int my_index = 0;
 			bool used_this_freq = false;
 			for(int t=0;t<decomp().my_frequencies()[f].number_of_time_blocks;t++){
+				PSI_HIGH_LOG("Sending frequency root time block to frequency workers: {} {} {}",decomp().my_frequencies()[f].freq_number,x_hat[f].size(),x_hat_global[t].nonZeros());
 				decomp_.template send_fourier_data<t_complex>(x_hat_sparse[my_freq_index], x_hat_global, &shapes[f][t][0], t, my_index, f, used_this_freq, false);
 			}
 			if(used_this_freq){
@@ -960,6 +961,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 				int my_index = 0;
 				bool used_this_freq = false;
 				for(int t=0;t<decomp().frequencies()[f].number_of_time_blocks;t++){
+					PSI_HIGH_LOG("Sending out root time block to frequency workers: {} {} {}",decomp().my_frequencies()[f].freq_number,out_hat[f].size(),out_hat_global[t].nonZeros());
 					decomp_.template send_fourier_data<t_complex>(out_hat_sparse[my_freq_index], out_hat_global, &shapes[my_freq_index][t][0], t, my_index, f, used_this_freq, true);
 				}
 				if(used_this_freq){
@@ -1003,13 +1005,14 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 	time15 = omp_get_wtime() - time15;
 #endif
 
-	PSI_HIGH_LOG("{} InTime: 1: {} 2: {} 3: {} ({} {} {} {}) 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {} 12: {} 13: {} 14: {} 15: {}",
-			decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
-			(float)time31, (float)time32, (float)time33, (float)time34, (float)time4,
-			(float)time5, (float)time6, (float)time7, (float)time8, (float)time9,
-			(float)time10, (float)time11, (float)time12, (float)time13, (float)time14,
-			(float)time15);
-
+	if(decomp().global_comm().rank() == 0){
+		PSI_HIGH_LOG("{} InTime: 1: {} 2: {} 3: {} ({} {} {} {}) 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {} 12: {} 13: {} 14: {} 15: {}",
+				decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
+				(float)time31, (float)time32, (float)time33, (float)time34, (float)time4,
+				(float)time5, (float)time6, (float)time7, (float)time8, (float)time9,
+				(float)time10, (float)time11, (float)time12, (float)time13, (float)time14,
+				(float)time15);
+	}
 }
 
 
@@ -1066,6 +1069,8 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 		if(decomp().parallel_mpi() and decomp().my_number_of_root_wavelets() != 0){
 			root_l21_weights = Vector<Real>(image_size()*decomp().my_number_of_root_wavelets());
 			decomp().template collect_l21_weights<Vector<Real>>(l21_proximal_weights_, global_l21_weights, image_size());
+			// This is strictly not needed as global_l21_weights could just be copied from l21_proximal_weights_ here as each proc should have their own
+			// weights on checkpoint restore
 			decomp().template distribute_l21_weights<Vector<Real>>(root_l21_weights, global_l21_weights, image_size());
 		}else if(!decomp().parallel_mpi()){
 			global_l21_weights = l21_proximal_weights_;
@@ -1151,11 +1156,8 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 	Vector<Real> w_l21;
 	Vector<Real> w_nuclear;
 
-	if(!decomp().parallel_mpi() or decomp().my_frequencies()[0].number_of_wavelets != 0){
-		w_l21 = mu()*l21_proximal_weights()/kappa2();
-	}
-
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
+		w_l21 = mu()*global_l21_weights/kappa2();
 		w_nuclear = nuclear_proximal_weights()/kappa1();
 	}
 
@@ -1382,12 +1384,12 @@ operator()(t_Matrix &out, t_Matrix const &x_guess, t_Matrix &p_guess, t_Matrix &
 #endif
 	}
 
-	PSI_HIGH_LOG("{} OutTime: 1: {} 2: {} 3: {} 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {}",
-			decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
-			(float)time4, (float)time5, (float)time6, (float)time7, (float)time8,
-			(float)time9, (float)time10, (float)time11);
-
-
+	if(decomp().global_comm().rank() == 0){
+		PSI_HIGH_LOG("{} OutTime: 1: {} 2: {} 3: {} 4: {} 5: {} 6: {} 7: {} 8: {} 9: {} 10: {} 11: {}",
+				decomp().global_comm().rank(), (float)time1, (float)time2, (float)time3,
+				(float)time4, (float)time5, (float)time6, (float)time7, (float)time8,
+				(float)time9, (float)time10, (float)time11);
+	}
 
 	// check function exists, otherwise, don't know if convergence is meaningful
 	if(not converged){

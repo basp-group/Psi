@@ -1,7 +1,5 @@
-
 #include <catch2/catch.hpp>
 #include <complex>
-#include <iomanip>
 
 #include "psi/chained_operators.h"
 #include "psi/linear_transform.h"

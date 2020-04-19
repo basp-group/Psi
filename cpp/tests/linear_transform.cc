@@ -1,6 +1,5 @@
 #include <catch2/catch.hpp>
 #include <complex>
-#include <iomanip>
 
 #include "psi/linear_transform.h"
 

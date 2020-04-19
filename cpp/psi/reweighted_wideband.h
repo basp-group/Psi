@@ -227,6 +227,9 @@ operator()(ReweightedResult const &warm) {
 	// actually gets to here, so we need to take that into account.
 	Real delta = std::max(min_delta(), update_delta(warm.algo.delta));
 
+	if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1 and decomp().my_number_of_root_wavelets() != 0){
+		delta = decomp().my_root_wavelet_comm().broadcast(delta, decomp().global_comm().root_id());
+	}
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		PSI_HIGH_LOG("-   Initial delta: {}", delta);
 		PSI_HIGH_LOG("-   Starting re-weighting iteration: {}", warm.algo.current_reweighting_iter);
