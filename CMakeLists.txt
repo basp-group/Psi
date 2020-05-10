@@ -3,8 +3,6 @@ project(PSI CXX)
 
 # Location of extra cmake includes for the project
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_files)
-# Downloads and installs GreatCMakeCookOff
-# It contains a number of cmake recipes
 
 # Version and git hash id
 include(VersionAndGitRef)
