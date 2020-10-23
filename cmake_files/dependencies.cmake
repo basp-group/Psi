@@ -44,7 +44,36 @@ if(MKL_FOUND AND mkl)
     set(PSI_EIGEN_MKL 1) # This will go into config.h
     set(EIGEN_USE_MKL_ALL 1) # This will go into config.h - it makes Eigen use MKL
     include_directories(${MKL_INCLUDE_DIR})
+    set(PSI_EIGEN_BLAS 1) # This will go into config.h
 else()
     set(PSI_EIGEN_MKL 0)
     set(EIGEN_USE_MKL_ALL 0)
+    set(PSI_EIGEN_BLAS FALSE)
+    find_package(BLAS)
+    if(BLAS_FOUND AND blas)
+       set(PSI_EIGEN_BLAS 1)
+       set(EIGEN_USE_BLAS 1)
+    else()
+       set(PSI_EIGEN_BLAS 0)
+       set(EIGEN_USE_BLAS 0)
+    endif()
+    set(PSI_BLAS ${BLAS_FOUND})
+endif()
+set(PSI_EIGEN_MKL ${MKL_FOUND})
+
+set(PSI_SCALAPACK FALSE)
+
+# Find Scalapack
+find_package(Scalapack)
+
+if(SCALAPACK_FOUND AND scalapack)
+    set(PSI_SCALAPACK 1) # This will go into config.h
+    if(MKL_FOUND)
+    	set(PSI_SCALAPACK_MKL 1)# This will go into config.h
+    endif()
+elseif(NOT SCALAPACK_FOUND AND scalapack)
+    message(FATAL_ERROR "Scalapack selected but not found")
+else()
+    set(PSI_SCALAPACK 0)
+    set(PSI_SCALAPACK_MKL 0)
 endif()

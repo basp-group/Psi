@@ -41,6 +41,7 @@ public:
 
 	static Communicator None() { return Communicator(MPI_COMM_NULL, false); }
 	static Communicator World() { return Communicator(MPI_COMM_WORLD, true); }
+	static Communicator World(int padding) { return Communicator(MPI_COMM_WORLD, true, padding); }
 	static Communicator Self() { return Communicator(MPI_COMM_SELF, true); }
 
 	virtual ~Communicator(){};
@@ -55,7 +56,6 @@ public:
 		}
 	}
 	//! The rank of this proc
-	//decltype(Comm::rank) rank() const { return mpi_comm ? mpi_comm->rank : 0; }
 	decltype(Comm::rank) rank() const {
 		if(mpi_comm){
 			return mpi_comm->rank;
@@ -76,8 +76,12 @@ public:
 		MPI_Barrier(**this);
 	}
 
+	//! Get the number of padding processes
+    t_uint number_of_padding_processes() const { return padding_processes; }
+    //! Setting Root id for this communicator
+	void root_id(int rank) { root_rank = rank; }
 	//! Root id for this communicator
-	static constexpr t_uint root_id() { return 0; }
+    t_uint root_id() const { return root_rank; }
 	//! True if process is root
 	bool is_root() const { return rank() == root_id(); }
 	//! \brief Duplicate communicator
@@ -86,6 +90,8 @@ public:
 	Communicator clone() const { return duplicate(); }
 	//! Will call MPI_Abort then print the reason
 	void abort(const std::string & reason) const;
+
+	double time() const { return MPI_Wtime(); }
 
 	//! In-place reduction over an image
 	template <class T>
@@ -219,6 +225,18 @@ public:
 		MPI_Allreduce(MPI_IN_PLACE, image.data(), image.size(), registered_type(T(0)), operation,
 				**this);
 	}
+	template <class T>
+	typename std::enable_if<is_registered_type<T>::value>::type
+	all_reduce(VectorBlock<T> &image, MPI_Op operation) const {
+		if(!active()) return;
+		if(size() == 1){
+			return;
+		}
+		assert(mpi_comm and image.size() and image.data());
+		MPI_Allreduce(MPI_IN_PLACE, image.data(), image.size(), registered_type(T(0)), operation,
+				**this);
+	}
+
 
 	//! Helper function for reducing through sum
 	template <class T>
@@ -243,84 +261,84 @@ public:
 
 
 	//! Broadcasts object
-	bool broadcast(bool const &value, t_uint const root = root_id()) const;
+	bool broadcast(bool const &value, t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	broadcast(T const &value, t_uint const root = root_id()) const;
+	broadcast(T const &value, t_uint const root) const;
 	//! Receive broadcast object
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	broadcast(t_uint const root = root_id()) const;
+	broadcast(t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<typename T::Scalar>::value, T>::type
-	broadcast(T const &vec, t_uint const root = root_id()) const;
+	broadcast(T const &vec, t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<typename T::Scalar>::value, T>::type
-	broadcast(t_uint const root = root_id()) const;
+	broadcast(t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<typename T::value_type>::value
 	and not std::is_base_of<Eigen::EigenBase<T>, T>::value,T>::type
-	broadcast(T const &vec, t_uint const root = root_id()) const;
+	broadcast(T const &vec, t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<typename T::value_type>::value
 	and not std::is_base_of<Eigen::EigenBase<T>, T>::value,T>::type
-	broadcast(t_uint const root = root_id()) const;
-	std::string broadcast(std::string const &input, t_uint const root = root_id()) const;
+	broadcast(t_uint const root) const;
+	std::string broadcast(std::string const &input, t_uint const root) const;
 
 	//! Scatter eigen Vector types
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Matrix<T>>::type
-	scatter_eigen_simple_columns(Matrix<T> const &values, t_uint const columnsperproc, t_uint const root = root_id()) const;
+	scatter_eigen_simple_columns(Matrix<T> const &values, t_uint const columnsperproc, t_uint const root) const;
 	//! Receive scattered objects
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Matrix<T>>::type
-	scatter_eigen_simple_columns(t_uint const columnsperproc, t_uint const root = root_id()) const;
+	scatter_eigen_simple_columns(t_uint const columnsperproc, t_uint const root) const;
 
 
 	//! Scatter count objects per proc
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	scatter(std::vector<T> const &values, t_uint const count, t_uint const root = root_id()) const;
+	scatter(std::vector<T> const &values, t_uint const count, t_uint const root) const;
 	//! Receive scattered objects
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	scatter(t_uint const count, t_uint const root = root_id()) const;
+	scatter(t_uint const count, t_uint const root) const;
 
 
 	//! Scatter one object per proc
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	scatter_one(std::vector<T> const &values, t_uint const root = root_id()) const;
+	scatter_one(std::vector<T> const &values, t_uint const root) const;
 	//! Receive scattered objects
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, T>::type
-	scatter_one(t_uint const root = root_id()) const;
+	scatter_one(t_uint const root) const;
 
 	//! Scatter
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Vector<T>>::type
 	scatterv(Vector<T> const &vec, std::vector<t_int> const &sizes,
-			t_uint const root = root_id()) const;
+			t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Vector<T>>::type
-	scatterv(t_int local_size, t_uint const root = root_id()) const;
+	scatterv(t_int local_size, t_uint const root) const;
 
 	// Gather one object per proc
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, std::vector<T>>::type
-	gather(T const value, t_uint const root = root_id()) const;
+	gather(T const value, t_uint const root) const;
 
 	//! Gather
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Vector<T>>::type
 	gather(Vector<T> const &vec, std::vector<t_int> const &sizes,
-			t_uint const root = root_id()) const {
+			t_uint const root) const {
 		if(!active()) return vec;
 		return gather_<Vector<T>, T>(vec, sizes, root);
 	}
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Vector<T>>::type
-	gather(Vector<T> const &vec, t_uint const root = root_id()) const {
+	gather(Vector<T> const &vec, t_uint const root) const {
 		if(!active()) return vec;
 		return gather_<Vector<T>, T>(vec, root);
 	}
@@ -328,20 +346,20 @@ public:
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, std::set<T>>::type
 	gather(std::set<T> const &set, std::vector<t_int> const &sizes,
-			t_uint const root = root_id()) const;
+			t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, std::set<T>>::type
-	gather(std::set<T> const &vec, t_uint const root = root_id()) const;
+	gather(std::set<T> const &vec, t_uint const root) const;
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, std::vector<T>>::type
 	gather(std::vector<T> const &vec, std::vector<t_int> const &sizes,
-			t_uint const root = root_id()) const {
+			t_uint const root) const {
 		if(!active()) return vec;
 		return gather_<std::vector<T>, T>(vec, sizes, root);
 	}
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, std::vector<T>>::type
-	gather(std::vector<T> const &vec, t_uint const root = root_id()) const {
+	gather(std::vector<T> const &vec, t_uint const root) const {
 		if(!active()) return vec;
 		return gather_<std::vector<T>, T>(vec, root);
 	}
@@ -350,7 +368,7 @@ public:
 	template <class T>
 	typename std::enable_if<is_registered_type<T>::value, Matrix<T>>::type
 	gather_eigen_simple_columns(Matrix<T> const &input, t_uint columnsperproc,
-			t_uint const root = root_id()) const;
+			t_uint const root) const;
 
 	//! Split current communicator
 	Communicator split(t_int colour) const { return split(colour, rank()); }
@@ -501,7 +519,12 @@ public:
 
 
 private:
-	// Class data
+
+	//! Rank of the root process
+	int root_rank = 0;
+	//! Number of processes to pad the root rank process by
+	int padding_processes = 0;
+	//! Class data
 	std::shared_ptr<Comm const> mpi_comm;
 
 	//! Deletes an mpi communicator
@@ -509,16 +532,18 @@ private:
 
 	//! \brief Constructs a communicator
 	Communicator(MPI_Comm const &comm);
-	//! \brief Construct a communicator and set whether active in this communicator or not. This
-	//! \details Enables split communicators where a communicator is split into communciators
-	//! based on the active variable value.
 	Communicator(MPI_Comm const &comm, bool const active);
+	//! \brief Construct a communicator, set whether active in this communicator or not, and
+	//! set the number of padding processes to use.
+	//! \details padding_processes allows extra MPI processes to be used to to pad out the root rank and give
+	//! it access to more memory. active enables split communicators where a communicator is split into communicators
+	//! based on the active variable value.
+	Communicator(MPI_Comm const &comm, bool const active, int const padding_processes);
 	//! Gather
 	template <class CONTAINER, class T>
-	CONTAINER gather_(CONTAINER const &vec, std::vector<t_int> const &sizes,
-			t_uint const root = root_id()) const;
+	CONTAINER gather_(CONTAINER const &vec, std::vector<t_int> const &sizes, t_uint const root) const;
 	template <class CONTAINER, class T>
-	CONTAINER gather_(CONTAINER const &vec, t_uint const root = root_id()) const;
+	CONTAINER gather_(CONTAINER const &vec, t_uint const root) const;
 };
 
 bool init(int argc, const char **argv);
@@ -734,7 +759,7 @@ Communicator::gather(std::set<T> const &set, std::vector<t_int> const &sizes,
 	assert(sizes[root] == set.size());
 	Vector<T> buffer(set.size());
 	std::copy(set.begin(), set.end(), buffer.data());
-	buffer = gather(buffer, sizes);
+	buffer = gather(buffer, sizes, root);
 	return std::set<T>(buffer.data(), buffer.data() + buffer.size());
 }
 
@@ -747,7 +772,7 @@ Communicator::gather(std::set<T> const &set, t_uint const root) const {
 
 	Vector<T> buffer(set.size());
 	std::copy(set.begin(), set.end(), buffer.data());
-	gather(buffer);
+	gather(buffer, root);
 	return std::set<T>();
 }
 

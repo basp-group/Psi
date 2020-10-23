@@ -167,16 +167,16 @@ operator()(OperatorFunction<t_Vector> const &op, t_Vector const &input) const {
 		= eigenvector.stableNorm() / static_cast<Real>(eigenvector.size());
 		auto const rel_val = std::abs((magnitude - previous_magnitude) / previous_magnitude);
 		converged = rel_val < tolerance();
-		PSI_INFO("    - Iteration {}/{} -- norm: {}", niters, itermax(), magnitude);
+		PSI_INFO("    - Power Method Blocking Iteration {}/{} -- norm: {}", niters, itermax(), magnitude);
 
 		eigenvector /= magnitude;
 		previous_magnitude = magnitude;
 	}
 	// check function exists, otherwise, don't know if convergence is meaningful
 	if(not converged) {
-		PSI_WARN("    - did not converge within {} iterations", itermax());
+		PSI_WARN("    - Power Method Blocking did not converge within {} iterations", itermax());
 	} else {
-		PSI_INFO("    - converged in {} of {} iterations", niters, itermax());
+		PSI_INFO("    - Power Method Blocking converged in {} of {} iterations", niters, itermax());
 	}
 	return DiagnosticAndResult{itermax(), converged, previous_magnitude, eigenvector.normalized()};
 }

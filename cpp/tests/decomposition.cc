@@ -1365,7 +1365,290 @@ TEST_CASE("Creates a decomposition") {
 		}
 	}
 
+	SECTION("Collect and distributed svd with wideband and wavelet parallelisaton - 2 frequencies per process"){
+		if(world_size >= 2){
+			auto Decomp = mpi::Decomposition(parallel, world);
+			t_int nlevels = 4;
+			t_int n_blocks = 2;
+			t_int frequencies = world_size*2;
+			t_int image_size = 1024;
 
+			std::vector<t_int> wavelet_levels = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				wavelet_levels[f] = nlevels;
+			}
+
+			std::vector<t_int> time_blocks = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				time_blocks[f] = n_blocks;
+			}
+
+			std::vector<std::vector<t_int>> sub_blocks = std::vector<std::vector<t_int>>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				sub_blocks[f] = std::vector<t_int>(n_blocks);
+				for(int t=0; t<n_blocks; t++){
+					sub_blocks[f][t] = 0;
+				}
+			}
+
+			Decomp.decompose_primal_dual(true, true, false, true, true, frequencies, wavelet_levels, time_blocks, sub_blocks);
+
+			Matrix<t_real> local_VT(frequencies, frequencies/world_size);
+			Matrix<t_real> total_VT(frequencies, frequencies);
+			if(world.rank() == 0){
+				for(int i=0; i<total_VT.rows(); i++){
+					for(int j=0; j<total_VT.cols(); j++){
+						total_VT(i, j) = j;
+					}
+				}
+			}
+
+
+			Matrix<t_real> local_data_svd(image_size, frequencies/world_size);
+			Vector<t_real> total_data_svd(image_size*frequencies);
+			if(world.rank() == 0){
+				for(int i=0; i<total_data_svd.rows(); i++){
+					for(int j=0; j<total_data_svd.cols(); j++){
+						total_data_svd(i*total_data_svd.cols()+j) = j;
+					}
+				}
+	            Eigen::Map<Matrix<t_real>> temp_total_data_svd(total_data_svd.data(), image_size, Decomp.global_number_of_frequencies());
+				for(int i=0; i<temp_total_data_svd.rows(); i++){
+					for(int j=0; j<temp_total_data_svd.cols(); j++){
+						CHECK(total_data_svd(i*temp_total_data_svd.cols()+j) == temp_total_data_svd(i, j));
+					}
+				}
+			}
+
+
+			Decomp.template distribute_svd_data<Matrix<t_real>, t_real>(local_VT, total_VT, local_data_svd, total_data_svd, image_size);
+			CHECK(local_VT.rows() == frequencies);
+			CHECK(local_VT.cols() == Decomp.my_number_of_frequencies());
+			for(int j=0; j<local_VT.rows(); j++){
+				for(int i=0; i<local_VT.cols(); i++){
+					CHECK(static_cast<t_int>(local_VT(j, i)) == static_cast<t_int>(i+((frequencies/world_size)*rank)));
+				}
+			}
+
+			Matrix<t_real> total_VT2(frequencies, frequencies);
+			Matrix<t_real> total_data_svd2(image_size, frequencies);
+
+			Decomp.template collect_svd_data<t_real>(local_VT, total_VT2, local_data_svd, total_data_svd2);
+			if(world.rank() == 0){
+				CHECK(total_VT.size() == total_VT2.size());
+				for(int i=0; i<total_VT.rows(); i++){
+					for(int j=0; j<total_VT.cols(); j++){
+						CHECK(total_VT(i, j) == total_VT2(i, j));
+
+					}
+				}
+				CHECK(total_data_svd.size() == total_data_svd2.size());
+				for(int i=0; i<total_data_svd2.rows(); i++){
+					for(int j=0; j<total_data_svd2.cols(); j++){
+						CHECK(total_data_svd(i*total_data_svd2.cols()+j) == total_data_svd2(i, j));
+					}
+				}
+			}
+		}else{
+			WARN("Test skipped because it requires at least 2 MPI processes");
+		}
+	}
+
+
+
+	SECTION("Collect and distributed svd results with wideband and wavelet parallelisaton - 2 frequencies per process"){
+		if(world_size >= 2){
+			auto Decomp = mpi::Decomposition(parallel, world);
+			t_int nlevels = 4;
+			t_int n_blocks = 2;
+			t_int frequencies = world_size*2;
+			t_int image_size = 1024;
+
+			std::vector<t_int> wavelet_levels = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				wavelet_levels[f] = nlevels;
+			}
+
+			std::vector<t_int> time_blocks = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				time_blocks[f] = n_blocks;
+			}
+
+			std::vector<std::vector<t_int>> sub_blocks = std::vector<std::vector<t_int>>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				sub_blocks[f] = std::vector<t_int>(n_blocks);
+				for(int t=0; t<n_blocks; t++){
+					sub_blocks[f][t] = 0;
+				}
+			}
+
+			Decomp.decompose_primal_dual(true, true, false, true, true, frequencies, wavelet_levels, time_blocks, sub_blocks);
+
+			Matrix<t_real> local_p(image_size, frequencies/world_size);
+			Matrix<t_complex> total_p(image_size, frequencies);
+			if(world.rank() == 0){
+				for(int i=0; i<total_p.rows(); i++){
+					for(int j=0; j<total_p.cols(); j++){
+						total_p(i, j).real(j);
+					}
+				}
+			}
+
+			Decomp.template distribute_svd_result_data<t_real, t_complex>(local_p, total_p);
+			CHECK(local_p.rows() == image_size);
+			CHECK(local_p.cols() == Decomp.my_number_of_frequencies());
+			for(int j=0; j<local_p.rows(); j++){
+				for(int i=0; i<local_p.cols(); i++){
+					CHECK(static_cast<t_int>(local_p(j, i)) == static_cast<t_int>(i+((frequencies/world_size)*rank)));
+				}
+			}
+
+			Matrix<t_complex> total_p2(image_size, frequencies);
+
+			Decomp.template collect_svd_result_data<t_real, t_complex>(local_p, total_p2);
+			if(world.rank() == 0){
+				CHECK(total_p.size() == total_p2.size());
+				for(int i=0; i<total_p.rows(); i++){
+					for(int j=0; j<total_p.cols(); j++){
+						CHECK(total_p(i, j).real() == total_p2(i, j).real());
+
+					}
+				}
+			}
+		}else{
+			WARN("Test skipped because it requires at least 2 MPI processes");
+		}
+	}
+
+
+	SECTION("Collect and distributed svd results single array usage with wideband and wavelet parallelisaton - 2 frequencies per process"){
+		if(world_size >= 2){
+			auto Decomp = mpi::Decomposition(parallel, world);
+			t_int nlevels = 4;
+			t_int n_blocks = 2;
+			t_int frequencies = world_size*2;
+			t_int image_size = 1024;
+
+			std::vector<t_int> wavelet_levels = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				wavelet_levels[f] = nlevels;
+			}
+
+			std::vector<t_int> time_blocks = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				time_blocks[f] = n_blocks;
+			}
+
+			std::vector<std::vector<t_int>> sub_blocks = std::vector<std::vector<t_int>>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				sub_blocks[f] = std::vector<t_int>(n_blocks);
+				for(int t=0; t<n_blocks; t++){
+					sub_blocks[f][t] = 0;
+				}
+			}
+
+			Decomp.decompose_primal_dual(true, true, false, true, true, frequencies, wavelet_levels, time_blocks, sub_blocks);
+
+			Matrix<t_real> local_p(image_size, frequencies/world_size);
+			Matrix<t_complex> total_p(image_size, frequencies);
+			if(world.rank() == 0){
+				for(int i=0; i<total_p.rows(); i++){
+					for(int j=0; j<total_p.cols(); j++){
+						total_p(i, j).real(j);
+					}
+				}
+			}
+
+			Decomp.template distribute_svd_result_data<t_real, t_complex>(local_p, total_p);
+			CHECK(local_p.rows() == image_size);
+			CHECK(local_p.cols() == Decomp.my_number_of_frequencies());
+			for(int j=0; j<local_p.rows(); j++){
+				for(int i=0; i<local_p.cols(); i++){
+					CHECK(static_cast<t_int>(local_p(j, i)) == static_cast<t_int>(i+((frequencies/world_size)*rank)));
+				}
+			}
+
+			Matrix<t_complex> total_p2(image_size, frequencies);
+
+			Decomp.template collect_svd_result_data<t_real, t_complex>(local_p, total_p2);
+			if(world.rank() == 0){
+				CHECK(total_p.size() == total_p2.size());
+				for(int i=0; i<total_p.rows(); i++){
+					for(int j=0; j<total_p.cols(); j++){
+						CHECK(total_p(i, j).real() == total_p2(i, j).real());
+
+					}
+				}
+			}
+		}else{
+			WARN("Test skipped because it requires at least 2 MPI processes");
+		}
+	}
+
+	SECTION("Test cross wavelet communicator all_sum_all - frequency per process"){
+		if(world_size >= 2){
+			auto Decomp = mpi::Decomposition(parallel, world);
+			t_int nlevels = 4;
+			t_int n_blocks = 2;
+			t_int frequencies = world_size;
+			t_int image_size = 24;
+
+			std::vector<t_int> wavelet_levels = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				wavelet_levels[f] = nlevels;
+			}
+
+			std::vector<t_int> time_blocks = std::vector<t_int>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				time_blocks[f] = n_blocks;
+			}
+
+			std::vector<std::vector<t_int>> sub_blocks = std::vector<std::vector<t_int>>(frequencies);
+			for(int f=0; f<frequencies; f++){
+				sub_blocks[f] = std::vector<t_int>(n_blocks);
+				for(int t=0; t<n_blocks; t++){
+					sub_blocks[f][t] = 0;
+				}
+			}
+
+			Vector<t_real> local_u(image_size*nlevels);
+			Vector<t_real> local_u_no_temp(image_size*nlevels);
+			Vector<t_real> final_local_u(image_size*nlevels);
+			for(int i=0; i<local_u.size(); i++){
+				local_u(i) = world.rank()+1;
+				local_u_no_temp(i) = local_u(i);
+				final_local_u(i) = int(((world.size())/2.0)*(world.size()+1.0));
+			}
+			Decomp.decompose_primal_dual(true, true, false, true, true, frequencies, wavelet_levels, time_blocks, sub_blocks);
+			for(int i=0; i<nlevels; i++){
+				if(Decomp.get_my_wavelet_comms_involvement()[i] == true){
+					Vector<t_real> temp_data = local_u.segment(i*image_size,image_size);
+					Decomp.get_my_wavelet_comms()[i].all_sum_all(temp_data);
+					local_u.segment(i*image_size,image_size) = temp_data;
+				}
+			}
+
+
+			for(int i=0; i<local_u.size(); i++){
+				CHECK(local_u(i) == final_local_u(i));
+			}
+
+			// TODO: Work out how to get this to work, so copies aren't required for these communications.
+			/*
+			for(int i=0; i<nlevels; i++){
+				if(Decomp.get_my_wavelet_comms_involvement()[i] == true){
+					Decomp.get_my_wavelet_comms()[i].all_sum_all<Vector<t_real>>(local_u_no_temp.segment(i*image_size,image_size));
+				}
+			}
+
+			for(int i=0; i<local_u_no_temp.size(); i++){
+				CHECK(local_u_no_temp(i) == final_local_u(i));
+			}*/
+
+		}else{
+			WARN("Test skipped because it requires at least 2 MPI processes");
+		}
+	}
 
 
 }

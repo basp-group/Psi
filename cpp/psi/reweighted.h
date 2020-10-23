@@ -128,7 +128,10 @@ public:
   //! Updates delta
   t_DeltaUpdate const &update_delta() const { return update_delta_; }
   //! Updates delta
-  Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) const { return update_delta_ = ud; }
+  Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) {
+	  update_delta_ = ud;
+	  return *this;
+  }
 
 protected:
   //! Inner loop algorithm

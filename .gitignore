@@ -1,5 +1,13 @@
+CMakeFiles
 lib/*.a
-lib/*.so
-build/
-CMakeCache.txt
+build*/
+.*.swp
 .settings
+python/tests/__pycache__
+.DS_Store
+.vscode/
+CMakeCache.txt
+/.pydevproject
+/.project
+/.autotools
+/.cproject

@@ -117,6 +117,14 @@ void nuclear_norm(Eigen::MatrixBase<T0> &out, Eigen::MatrixBase<T0> &x, Eigen::M
   out = svd.matrixU() * s.asDiagonal() * svd.matrixV().transpose();
 }
 
+template <class T>
+void nuclear_norm(Eigen::MatrixBase<T> &out, Eigen::MatrixBase<T> &x, typename real_type<T>::type w)
+{
+  typename Eigen::BDCSVD<typename T::PlainObject> svd(x, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  auto s = psi::soft_threshhold(svd.singularValues(), w);
+  out = svd.matrixU() * s.asDiagonal() * svd.matrixV().transpose();
+}
+
 //! Proximal for projection on the positive quadrant
 template <class T>
 void positive_quadrant(Vector<T> &out, typename real_type<T>::type, Vector<T> const &x) {

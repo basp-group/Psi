@@ -8,7 +8,28 @@ namespace psi {
 namespace mpi {
 #ifdef PSI_MPI
 
+Communicator::Communicator(MPI_Comm const &external_comm) : Communicator(external_comm, true, 0){
 
+}
+
+Communicator::Communicator(MPI_Comm const &external_comm, bool const active) : Communicator(external_comm, active, 0){
+
+}
+
+Communicator::Communicator(MPI_Comm const &external_comm, bool const active, int const padding_processes) : mpi_comm(nullptr), root_rank(padding_processes), padding_processes(padding_processes){
+	if(external_comm == MPI_COMM_NULL){
+		return;
+	}
+	int size, rank;
+	MPI_Comm_size(external_comm, &size);
+	MPI_Comm_rank(external_comm, &rank);
+	if(root_rank > size){
+		root_rank = 0;
+		PSI_HIGH_LOG("Problem with specified padding processes, bigger than total available processes. Setting to zero.");
+	}
+	Comm const data{external_comm, static_cast<t_uint>(size), static_cast<t_uint>(rank), active};
+	mpi_comm = std::shared_ptr<Comm const>(new Comm(data), &delete_comm);
+}
 
 bool Communicator::broadcast(bool const &value, t_uint const root) const {
 	assert(root < size());
@@ -39,20 +60,6 @@ void Communicator::delete_comm(Communicator::Comm *const mpi_comm) {
 	delete mpi_comm;
 }
 
-Communicator::Communicator(MPI_Comm const &external_comm) : Communicator(external_comm, true){
-
-}
-
-Communicator::Communicator(MPI_Comm const &external_comm, bool const active) : mpi_comm(nullptr){
-	if(external_comm == MPI_COMM_NULL){
-		return;
-	}
-	int size, rank;
-	MPI_Comm_size(external_comm, &size);
-	MPI_Comm_rank(external_comm, &rank);
-	Comm const data{external_comm, static_cast<t_uint>(size), static_cast<t_uint>(rank), active};
-	mpi_comm = std::shared_ptr<Comm const>(new Comm(data), &delete_comm);
-}
 
 void Communicator::abort(const std::string & reason) const{
 	fprintf(stderr, "MPI Error on Rank %i: %s\n", rank(), reason.c_str());

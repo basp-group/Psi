@@ -3,6 +3,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <ctime>
 #include <Eigen/Eigenvalues>
 
 #include <psi/primal_dual_time_blocking.h>

@@ -1,7 +1,8 @@
 # list of headers
 set(headers
   primal_dual_blocking_wideband_serial.h
-  primal_dual.h primal_dual_wideband_blocking.h primal_dual_time_blocking.h primal_dual_time_blocking_debug.h logging.disabled.h maths.h proximal.h relative_variation.h
+  primal_dual.h primal_dual_wideband_blocking.h
+  primal_dual_time_blocking.h primal_dual_time_blocking_debug.h logging.disabled.h maths.h proximal.h relative_variation.h
   reweighted.h reweighted_wideband.h reweighted_time_blocking.h types.h wrapper.h exception.h linear_transform.h linear_transform_operations.h logging.h positive_quadrant.h
   real_type.h sampling.h power_method.h power_method_wideband.h power_method_blocking.h preconditioned_primal_dual.h primal_dual_time_blocking.h
   serial_primal_dual_time_blocking.h ${PROJECT_BINARY_DIR}/include/psi/config.h
@@ -22,6 +23,11 @@ if(PSI_MPI)
   list(APPEND mpi_headers mpi/decomposition.h mpi/communicator.h mpi/types.h mpi/utilities.h wavelets.sara.h)
 endif()
 
+if(PSI_SCALAPACK)
+  list(APPEND sources mpi/scalapack.cc)
+  list(APPEND mpi_headers mpi/scalapack.h)
+endif()
+
 add_library(psi SHARED ${sources})
 set(version "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}.${PSI_VERSION_PATCH}")
 set(soversion "${PSI_VERSION_MAJOR}.${PSI_VERSION_MINOR}")
@@ -37,9 +43,22 @@ if(TIFF_FOUND)
   target_include_directories(psi SYSTEM PUBLIC ${TIFF_INCLUDE_DIR})
 endif()
 
+if(SCALAPACK_FOUND)
+  target_link_libraries(psi ${SCALAPACK_LIBRARY})
+  if(BLACS_FOUND) 
+  	target_link_libraries(psi ${BLACS_LIBRARIES})
+  endif()
+endif()
+
 if(MKL_FOUND)
   target_link_libraries(psi ${MKL_LIBRARIES})
+  target_include_directories(psi SYSTEM PUBLIC ${MKL_INCLUDE_DIR})
 endif()
+
+if(BLAS_FOUND AND NOT MKL_FOUND)
+  target_link_libraries(psi ${BLAS_LIBRARIES})
+endif()
+
 
 # Add spdlog as direct dependency if not downloaded
 if(SPDLOG_INCLUDE_DIR AND NOT spdlog_BUILT_AS_EXTERNAL_PROJECT)

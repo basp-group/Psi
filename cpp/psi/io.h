@@ -277,7 +277,7 @@ IOStatus IO<T>::restore_time_blocking(std::string checkpoint_filename, t_Vector 
 		}
 		fclose(pFile);
 	}else{
-		error = IOStatus::FileWriteError;
+		error = IOStatus::OpenFailure;
 	}
 	return error;
 }
@@ -529,7 +529,7 @@ IOStatus IO<T>::restore_wideband(std::string checkpoint_filename, t_Matrix &out,
 		}
 		fclose(pFile);
 	}else{
-		error = IOStatus::FileWriteError;
+		error = IOStatus::OpenFailure;
 	}
 	return error;
 }

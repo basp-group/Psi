@@ -16,9 +16,24 @@
 //! True if using MPI
 #cmakedefine PSI_MPI
 
+//! True if found MKL
+#cmakedefine PSI_MKL
+
 // Whether Eigen will use MKL (if MKL was found and PSI_EIGEN_MKL is enabled in CMake)
 #cmakedefine PSI_EIGEN_MKL
-#cmakedefine EIGEN_USE_MKL_ALL 
+#cmakedefine EIGEN_USE_MKL_ALL
+
+//! True if found BLAS
+#cmakedefine PSI_BLAS
+
+// Whether Eigen will use BLAS (if BLAS was found and PSI_EIGEN_BLAS is enabled in CMake)
+#cmakedefine PSI_EIGEN_BLAS
+#cmakedefine EIGEN_USE_BLAS 
+
+// Whether we will use the SVD from Scalapack instead of Eigen
+#cmakedefine PSI_SCALAPACK
+// Whether the scalapack is from the MKL library
+#cmakedefine PSI_SCALAPACK_MKL
 
 // figures out available basic types
 #cmakedefine PSI_CHAR_ARCH

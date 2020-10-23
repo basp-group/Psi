@@ -23,14 +23,21 @@ typedef std::complex<t_real> t_complex;
 //! \brief A vector of a given type
 //! \details Operates as mathematical vector.
 template <class T = t_real> using Vector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+template <class T = t_real> using VectorBlock = Eigen::VectorBlock<T, Eigen::Dynamic>;
+
+
 //! \brief A matrix of a given type
 //! \details Operates as mathematical matrix.
+//template <class T = t_real> using Matrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 template <class T = t_real> using Matrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+template <class T = t_real> using RowMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 //! \brief A 1-dimensional list of elements of given type
 //! \details Operates coefficient-wise, not matrix-vector-wise
 template <class T = t_real> using Array = Eigen::Array<T, Eigen::Dynamic, 1>;
 //! \brief A 2-dimensional list of elements of given type
 //! \details Operates coefficient-wise, not matrix-vector-wise
+//template <class T = t_real> using Image = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 template <class T = t_real> using Image = Eigen::Array<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 //! Typical function out = A*x

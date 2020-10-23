@@ -1,6 +1,6 @@
 #include <catch2/catch.hpp>
 #include <random>
-
+#include <ctime>
 #include <assert.h>
 
 #include <Eigen/Dense>
@@ -89,7 +89,7 @@ TEST_CASE("Forward Backward, testing norm(output - data()) < l2ball_epsilon() wh
   out = l2ball_proximal(0, target - data) + data;
   CHECK((out - data).stableNorm() <= epsilon); // ok...
 
-  CHECK((result.x - data).stableNorm() <= epsilon); // failed, why ??
+  CHECK((result.x - data).stableNorm() <= epsilon);
   // Check decrease of the objective function
   CHECK(psi::l2_norm(result.x - target, (ui.array()).sqrt().matrix()) <= psi::l2_norm(target, (ui.array()).sqrt().matrix()));
   // CHECK(psi::l2_norm(result.x - data, ui.sqrt()) <= epsilon);

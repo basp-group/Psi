@@ -115,8 +115,12 @@ class Decomposition {
 		std::vector<WaveletDecomp> root_wavelets;
 		//! Lower bound on the number of root wavelets for this process
 		int lower_root_wavelet;
-		//! Communicator for the wavelets for this frequency
+		//! Communicator for the root wavelets
 		Communicator root_wavelet_comm = Communicator::None();
+		//! Communicators across all wavelets
+		std::vector<Communicator> wavelet_comms;
+		//! Involvement in wavelet_comms
+		std::vector<bool> wavelet_comms_involvement;
 		//! Are we doing wavelet decomposition
 		bool wavelet_decomp = false;
 		//! Are we doing frequency decomposition
@@ -156,7 +160,7 @@ public:
 	void restore_complete();
 	void epsilon_and_weights_used();
 
-	template <class T> typename std::enable_if<is_registered_type<T>::value, T>::type all_reduce(T const &value, MPI_Op operation) const;
+	//template <class T> typename std::enable_if<is_registered_type<T>::value, T>::type all_reduce(T const &value, MPI_Op operation) const;
 
 	template <class T> void collect_indices(std::vector<std::vector<T>> const indices, std::vector<std::vector<T>> &global_indices, bool global_root) const;
 	template <class T> void distribute_fourier_data(std::vector<std::vector<Eigen::SparseMatrix<T>>> &local_sparse, std::vector<std::vector<Eigen::SparseMatrix<T>>> &global_sparse) const;
@@ -167,6 +171,10 @@ public:
 	template <class T> void collect_residuals(std::vector<T> const residual, std::vector<T> &total_residuals) const;
 	template <class T> void collect_frequency_root_data(Matrix<T> const frequency_data, Matrix<T> &total_frequency_data) const;
 	template <class T1, class T2> void distribute_frequency_data(T1 &frequency_data, T1 const total_frequency_data, bool const freq_root_only) const;
+	template <class T> void collect_svd_data(Matrix<T> const local_VT, Matrix<T> &total_VT, Matrix<T> const local_data_svd, Matrix<T> &total_data_svd) const;
+	template <class T1, class T2> void distribute_svd_data(T1 &local_VT, T1 const total_VT, T1 &local_data_svd, Vector<T2> total_data_svd, int const image_size) const;
+	template <class T1, class T2> void collect_svd_result_data(Matrix<T1> const local_p, Matrix<T2> &total_p) const;
+	template <class T1, class T2> void distribute_svd_result_data(Matrix<T1> &local_p, Matrix<T2> const total_p) const;
 	template <class T> void collect_wavelet_root_data(Matrix<T> const wavelet_data, Matrix<T> &total_wavelet_data, int const image_size) const;
 	template <class T> void collect_epsilons(T const epsilons, T &total_epsilons) const;
 	template <class T> void distribute_epsilons(T &epsilons, T const total_epsilons) const;
@@ -238,6 +246,9 @@ public:
 	std::pair<int, int> number_and_start_of_local_wavelets(int number_of_wavelets, std::vector<WaveletDecomp> wavelets);
 	bool own_this_frequency(int frequency);
 
+	std::vector<Communicator> get_my_wavelet_comms() const { return my_decomp_.wavelet_comms; }
+	std::vector<bool> get_my_wavelet_comms_involvement() const { return my_decomp_.wavelet_comms_involvement; }
+
 protected:
 
 	// Class data
@@ -247,7 +258,7 @@ protected:
 private:
 
 	void build_my_decomposition();
-	void report_on_decomposition();
+	void report_on_decomposition(bool quiet);
 
 
 
@@ -262,6 +273,7 @@ void Decomposition::collect_indices(std::vector<std::vector<T>> const indices, s
 		//! can be indexed using f from the f loop below.
 		int my_indices_index = 0;
 		bool freq_used = false;
+		int global_freq_index = 0;
 		for(int f=0; f<decomp_.number_of_frequencies; f++){
 			int receiver_rank;
 			if(global_root){
@@ -270,12 +282,19 @@ void Decomposition::collect_indices(std::vector<std::vector<T>> const indices, s
 				receiver_rank = decomp_.frequencies[f].global_owner;
 			}
 			if(decomp_.frequencies[f].in_this_frequency or (global_root and decomp_.global_comm.is_root())){
-				if((global_root and decomp_.global_comm.is_root()) or (not global_root and decomp_.frequencies[f].freq_comm.is_root())){
+				if((global_root and decomp_.global_comm.is_root()) or (not global_root and decomp_.frequencies[f].global_owner == decomp_.global_comm.rank())){
 					int time_block_index = 0;
 					for(int t=0; t<decomp_.frequencies[f].number_of_time_blocks; t++){
+						//! freq_index is used so when not running with global_root we can track the frequencies this process owns
+						//! so the global_indices are correct for this local mode.
+						int freq_index = f;
+						if(not global_root){
+							freq_index = global_freq_index;
+						}
 						//! If this is data for the root freq process then just copy it to the new data structure, do not send.
 						if(decomp_.frequencies[f].time_blocks[t].global_owner == decomp_.global_comm.rank()){
-							global_indices[f][t] = indices[my_indices_index][time_block_index];
+
+							global_indices[freq_index][t] = indices[my_indices_index][time_block_index];
 							time_block_index++;
 							freq_used = true;
 							//! Otherwise, receive from the owning process
@@ -283,9 +302,12 @@ void Decomposition::collect_indices(std::vector<std::vector<T>> const indices, s
 							t_uint tag = 0;
 							int temp_size;
 							decomp_.global_comm.recv_single(&temp_size, decomp_.frequencies[f].time_blocks[t].global_owner, tag);
-							global_indices[f][t] = T(temp_size);
-							decomp_.global_comm.recv_eigen(global_indices[f][t], decomp_.frequencies[f].time_blocks[t].global_owner, tag);
+							global_indices[freq_index][t] = T(temp_size);
+							decomp_.global_comm.recv_eigen(global_indices[freq_index][t], decomp_.frequencies[f].time_blocks[t].global_owner, tag);
 						}
+					}
+					if(not global_root){
+						global_freq_index++;
 					}
 					//! If I am not the root process then send the data I have.
 				}else{
@@ -401,9 +423,9 @@ void Decomposition::receive_fourier_data(std::vector<Eigen::SparseMatrix<T>> &lo
 		if(global_root){
 			sender_id = decomp_.global_comm.root_id();
 		}else{
-			sender_id = decomp_.frequencies[freq].freq_comm.root_id();
+			sender_id = my_decomp_.frequencies[my_freq].global_owner;
 		}
-		if((not global_root and not my_decomp_.frequencies[my_freq].freq_comm.is_root()) or (global_root and not decomp_.global_comm.is_root())){
+		if(((not global_root) and my_decomp_.frequencies[my_freq].global_owner != decomp_.global_comm.rank()) or (global_root and not decomp_.global_comm.is_root())){
 			for(int k=0; k<my_decomp_.frequencies[my_freq].number_of_time_blocks; k++){
 				t_uint tag = 0;
 				decomp_.global_comm.recv_sparse_eigen(local_sparse[k], sender_id, tag);
@@ -424,9 +446,10 @@ void Decomposition::send_fourier_data(std::vector<Eigen::SparseMatrix<T>> &local
 
 
 	if(decomp_.parallel_mpi){
-		if((not global_root and decomp_.frequencies[freq].freq_comm.is_root()) or (global_root and decomp_.global_comm.is_root())){
+		int global_freq = my_decomp_.frequencies[freq].freq_number;
+		if((not global_root and decomp_.frequencies[global_freq].global_owner == decomp_.global_comm.rank()) or (global_root and decomp_.global_comm.is_root())){
 			//! If this is data for the root process then just copy it to the new data structure, do not send.
-			if((global_root and (decomp_.frequencies[freq].time_blocks[block].global_owner == decomp_.global_comm.rank())) or (not global_root and (my_decomp_.frequencies[freq].time_blocks[block].global_owner == decomp_.global_comm.rank()))){
+			if((global_root and (decomp_.frequencies[global_freq].time_blocks[block].global_owner == decomp_.global_comm.rank())) or ((not global_root) and (decomp_.frequencies[global_freq].time_blocks[block].global_owner == decomp_.global_comm.rank()))){
 				local_sparse[my_index] = global_sparse[block];
 				local_sparse[my_index].makeCompressed();
 				my_index++;
@@ -440,12 +463,7 @@ void Decomposition::send_fourier_data(std::vector<Eigen::SparseMatrix<T>> &local
 				if(not decomp_.frequencies[freq].requests_initialised){
 					PSI_ERROR("Going to call an nonblocking routine when the requests have not been initialised. An error has occurred");
 				}
-				int owner;
-				if(global_root){
-					owner = decomp_.frequencies[freq].time_blocks[block].global_owner;
-				}else{
-					owner = my_decomp_.frequencies[freq].time_blocks[block].global_owner;
-				}
+				int owner = decomp_.frequencies[global_freq].time_blocks[block].global_owner;
 				decomp_.global_comm.nonblocking_send_sparse_eigen(global_sparse[block], owner, tag, shapes, &decomp_.frequencies[freq].requests[block*4]);
 			}
 
@@ -809,7 +827,6 @@ void Decomposition::collect_frequency_root_data(Matrix<T> const frequency_data, 
 	return;
 }
 
-
 template <class T1, class T2>
 void Decomposition::distribute_frequency_data(T1 &frequency_data, T1 const total_data, const bool freq_root_only) const{
 
@@ -887,6 +904,280 @@ void Decomposition::distribute_frequency_data(T1 &frequency_data, T1 const total
 
 	return;
 }
+
+template <class T>
+void Decomposition::collect_svd_data(Matrix<T> const local_VT, Matrix<T> &total_VT, Matrix<T> const local_data_svd, Matrix<T> &total_data_svd) const{
+
+	if(decomp_.parallel_mpi){
+		if(decomp_.global_comm.is_root()){
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f=0; f<decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				//! If this is data for the root process then just copy it to the new data structure, do not send.
+				if(decomp_.frequencies[f].global_owner == decomp_.global_comm.rank()){
+					for(int i=0; i<local_VT.rows(); i++){
+						total_VT(i,f) = local_VT(i,my_freq_index);
+					}
+					for(int i=0; i<local_data_svd.rows(); i++){
+						total_data_svd(i,f) = local_data_svd(i,my_freq_index);
+					}
+					my_freq_used = true;
+					//! Otherwise, send to the owning process
+				}else{
+					//! TODO: Optimise the receive below so the temp_vector is not needed
+					t_uint tag = decomp_.frequencies[f].freq_number;
+					int data_size;
+					decomp_.global_comm.recv_single(&data_size, decomp_.frequencies[f].global_owner, tag);
+					Vector<T> temp_vector(data_size);
+					decomp_.global_comm.recv_eigen(temp_vector, decomp_.frequencies[f].global_owner, tag);
+					total_VT.col(f) = temp_vector;
+					decomp_.global_comm.recv_single(&data_size, decomp_.frequencies[f].global_owner, tag);
+					Vector<T> temp_vector_2(data_size);
+					decomp_.global_comm.recv_eigen(temp_vector_2, decomp_.frequencies[f].global_owner, tag);
+					total_data_svd.col(f) = temp_vector_2;
+				}
+
+			}
+			//! If I am not the root process but a frequency owner send my data to the root.
+		}else{
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < my_decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				if(my_decomp_.frequencies[f].global_owner == my_decomp_.global_comm.rank()){
+					//! TODO: Optimise the send below so the temp_vector is not needed
+					t_uint tag = my_decomp_.frequencies[f].freq_number;
+					Vector<T> temp_vector = local_VT.col(my_freq_index);
+					int data_size = temp_vector.size();
+					my_decomp_.global_comm.send_single(data_size, my_decomp_.global_comm.root_id(), tag);
+					my_decomp_.global_comm.send_eigen(temp_vector, my_decomp_.global_comm.root_id(), tag);
+					Vector<T> temp_vector_2 = local_data_svd.col(my_freq_index);
+					data_size = temp_vector_2.size();
+					my_decomp_.global_comm.send_single(data_size, my_decomp_.global_comm.root_id(), tag);
+					my_decomp_.global_comm.send_eigen(temp_vector_2, my_decomp_.global_comm.root_id(), tag);
+					my_freq_used = true;
+				}
+			}
+		}
+
+	}else{
+		for(int f = 0; f < total_VT.size(); f++){
+			total_VT(f) = local_VT(f);
+		}
+		for(int f = 0; f < total_data_svd.size(); f++){
+			total_data_svd(f) = local_data_svd(f);
+		}
+	}
+
+	return;
+}
+
+template <class T1, class T2>
+void Decomposition::distribute_svd_data(T1 &local_VT, T1 const total_VT, T1 &local_data_svd, Vector<T2> total_data_svd, int const image_size) const{
+
+	if(decomp_.parallel_mpi){
+		if(decomp_.global_comm.is_root()){
+			Eigen::Map<T1> total_data_svd_matrix(total_data_svd.data(), image_size, decomp_.number_of_frequencies);
+
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				//! If this is data for the root process then just copy it to the new data structure, do not send.
+				if(decomp_.frequencies[f].global_owner == decomp_.global_comm.rank()){
+					for(int i=0; i<total_VT.rows(); i++){
+						local_VT(i, my_freq_index) = total_VT(i, f);
+					}
+					for(int i=0; i<total_data_svd_matrix.rows(); i++){
+						local_data_svd(i, my_freq_index) = total_data_svd_matrix(i, f);
+					}
+					my_freq_used = true;
+					//! Otherwise, send to the owning process
+				}else{
+					//! TODO: Optimise the send below so the temp_vector is not needed
+					t_uint tag = decomp_.frequencies[f].freq_number;
+					Vector<T2> temp_vector = total_VT.col(f);
+					int data_size = temp_vector.size();
+					decomp_.global_comm.send_single(data_size, decomp_.frequencies[f].global_owner, tag);
+					decomp_.global_comm.send_eigen(temp_vector, decomp_.frequencies[f].global_owner, tag);
+					Vector<T2> temp_vector_2 = total_data_svd_matrix.col(f);
+					data_size = temp_vector_2.size();
+					decomp_.global_comm.send_single(data_size, decomp_.frequencies[f].global_owner, tag);
+					decomp_.global_comm.send_eigen(temp_vector_2, decomp_.frequencies[f].global_owner, tag);
+				}
+
+			}
+			//! If I am not the root process then wait to receive the data I am expecting.
+		}else{
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < my_decomp_.number_of_frequencies; f++){
+				if(my_decomp_.frequencies[f].global_owner == my_decomp_.global_comm.rank()){
+					if(my_freq_used){
+						my_freq_index++;
+						my_freq_used = false;
+					}
+					//! TODO: Optimise the receive below so the temp_vector is not needed
+					int data_size;
+					t_uint tag = my_decomp_.frequencies[f].freq_number;
+					my_decomp_.global_comm.recv_single(&data_size, my_decomp_.global_comm.root_id(), tag);
+					Vector<T2> temp_vector(data_size);
+					my_decomp_.global_comm.recv_eigen(temp_vector, my_decomp_.global_comm.root_id(), tag);
+					local_VT.col(my_freq_index) = temp_vector;
+					my_decomp_.global_comm.recv_single(&data_size, my_decomp_.global_comm.root_id(), tag);
+					Vector<T2> temp_vector_2(data_size);
+					my_decomp_.global_comm.recv_eigen(temp_vector_2, my_decomp_.global_comm.root_id(), tag);
+					local_data_svd.col(my_freq_index) = temp_vector_2;
+					my_freq_used = true;
+				}
+			}
+		}
+
+	}else{
+		for(int f = 0; f < total_VT.size(); f++){
+			local_VT(f) = total_VT(f);
+		}
+		for(int f = 0; f < total_data_svd.size(); f++){
+			local_data_svd(f) = total_data_svd(f);
+		}
+	}
+
+	return;
+}
+
+template <class T1, class T2>
+void Decomposition::collect_svd_result_data(Matrix<T1> const local_p, Matrix<T2> &total_p) const{
+
+	if(decomp_.parallel_mpi){
+		if(decomp_.global_comm.is_root()){
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f=0; f<decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				//! If this is data for the root process then just copy it to the new data structure, do not send.
+				if(decomp_.frequencies[f].global_owner == decomp_.global_comm.rank()){
+					for(int i=0; i<local_p.rows(); i++){
+						total_p(i,f).real(local_p(i,my_freq_index));
+					}
+					my_freq_used = true;
+					//! Otherwise, send to the owning process
+				}else{
+					//! TODO: Optimise the receive below so the temp_vector is not needed
+					t_uint tag = decomp_.frequencies[f].freq_number;
+					int data_size;
+					decomp_.global_comm.recv_single(&data_size, decomp_.frequencies[f].global_owner, tag);
+					Vector<T1> temp_vector(data_size);
+					decomp_.global_comm.recv_eigen(temp_vector, decomp_.frequencies[f].global_owner, tag);
+					for(int i=0; i<temp_vector.size(); i++){
+						total_p(i, f).real(temp_vector(i));
+					}
+				}
+
+			}
+			//! If I am not the root process but a frequency owner send my data to the root.
+		}else{
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < my_decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				if(my_decomp_.frequencies[f].global_owner == my_decomp_.global_comm.rank()){
+					//! TODO: Optimise the send below so the temp_vector is not needed
+					t_uint tag = my_decomp_.frequencies[f].freq_number;
+					Vector<T1> temp_vector = local_p.col(my_freq_index);
+					int data_size = temp_vector.size();
+					my_decomp_.global_comm.send_single(data_size, my_decomp_.global_comm.root_id(), tag);
+					my_decomp_.global_comm.send_eigen(temp_vector, my_decomp_.global_comm.root_id(), tag);
+					my_freq_used = true;
+				}
+			}
+		}
+
+	}else{
+		for(int f = 0; f < total_p.size(); f++){
+			total_p(f).real(local_p(f));
+		}
+	}
+
+	return;
+}
+
+template <class T1, class T2>
+void Decomposition::distribute_svd_result_data(Matrix<T1> &local_p, Matrix<T2> const total_p) const{
+
+	if(decomp_.parallel_mpi){
+		if(decomp_.global_comm.is_root()){
+
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < decomp_.number_of_frequencies; f++){
+				if(my_freq_used){
+					my_freq_index++;
+					my_freq_used = false;
+				}
+				//! If this is data for the root process then just copy it to the new data structure, do not send.
+				if(decomp_.frequencies[f].global_owner == decomp_.global_comm.rank()){
+					for(int i=0; i<total_p.rows(); i++){
+						local_p(i, my_freq_index) = total_p(i, f).real();
+					}
+					my_freq_used = true;
+					//! Otherwise, send to the owning process
+				}else{
+					//! TODO: Optimise the send below so the temp_vector is not needed
+					t_uint tag = decomp_.frequencies[f].freq_number;
+					Vector<T1> temp_vector = total_p.col(f).real();
+					int data_size = temp_vector.size();
+					decomp_.global_comm.send_single(data_size, decomp_.frequencies[f].global_owner, tag);
+					decomp_.global_comm.send_eigen(temp_vector, decomp_.frequencies[f].global_owner, tag);
+				}
+
+			}
+			//! If I am not the root process then wait to receive the data I am expecting.
+		}else{
+			int my_freq_index = 0;
+			bool my_freq_used = false;
+			for(int f = 0; f < my_decomp_.number_of_frequencies; f++){
+				if(my_decomp_.frequencies[f].global_owner == my_decomp_.global_comm.rank()){
+					if(my_freq_used){
+						my_freq_index++;
+						my_freq_used = false;
+					}
+					//! TODO: Optimise the receive below so the temp_vector is not needed
+					int data_size;
+					t_uint tag = my_decomp_.frequencies[f].freq_number;
+					my_decomp_.global_comm.recv_single(&data_size, my_decomp_.global_comm.root_id(), tag);
+					Vector<T1> temp_vector(data_size);
+					my_decomp_.global_comm.recv_eigen(temp_vector, my_decomp_.global_comm.root_id(), tag);
+					local_p.col(my_freq_index) = temp_vector;
+					my_freq_used = true;
+				}
+			}
+		}
+
+	}else{
+		for(int f = 0; f < total_p.size(); f++){
+			local_p(f) = total_p(f).real();
+		}
+	}
+
+	return;
+}
+
 
 template <class T>
 void Decomposition::collect_wavelet_root_data(Matrix<T> const wavelet_data, Matrix<T> &total_data, int const image_size) const{
@@ -1131,6 +1422,6 @@ void Decomposition::distribute_l21_weights(T &l21_weights, T const total_l21_wei
 
 }
 
-} // namespace decomp
+} // namespace Decomposition
 } // namespace psi
 #endif /* ifndef PSI_MPI_DECOMPOSITION */

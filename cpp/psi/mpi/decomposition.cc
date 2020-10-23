@@ -24,7 +24,6 @@ Decomposition::Decomposition(const bool parallel,  Communicator comm_world){
 	}
 }
 
-
 //! Calculate the global decomposition of the problem (mapping of data to each process) for distributed memory computations (i.e. MPI).
 //! We have four potential dimensions to distribute over:
 //! - Measurement Operator:
@@ -39,6 +38,8 @@ Decomposition::Decomposition(const bool parallel,  Communicator comm_world){
 //! sub-blocks, stopping when available processes are exhausted. However, the user can override this functionality by specifying whether
 //! any given decomposition is enabled (through the boolean variables passed to this routine).
 void Decomposition::decompose_primal_dual(bool const freq_decomp, bool const time_decomp, bool const subblock_decomp, bool const wavelet_decomp,  bool const wavelet_root_decomp, t_int const input_frequencies, std::vector<t_int> input_wavelet_levels, std::vector<t_int> input_time_blocks, std::vector<std::vector<t_int>> input_sub_blocks, bool quiet){
+
+	int padding_processes = decomp_.global_comm.number_of_padding_processes();
 
 	decomp_.wavelet_decomp = wavelet_decomp;
 	decomp_.freq_decomp = freq_decomp;
@@ -68,7 +69,7 @@ void Decomposition::decompose_primal_dual(bool const freq_decomp, bool const tim
 
 	if(freq_decomp){
 
-		decompose_frequencies(input_frequencies, 0, mpi_size-1, time_decomp, subblock_decomp, wavelet_decomp);
+		decompose_frequencies(input_frequencies, padding_processes, mpi_size-1, time_decomp, subblock_decomp, wavelet_decomp);
 
 	}else{
 
@@ -85,10 +86,10 @@ void Decomposition::decompose_primal_dual(bool const freq_decomp, bool const tim
 		decomp_.frequencies[0].number_of_time_blocks = input_time_blocks[0];
 		decomp_.frequencies[0].global_owner = decomp_.global_comm.root_id();
 		decomp_.frequencies[0].process_ids = std::vector<t_uint>(mpi_size);
-		for(int j=0; j<mpi_size; ++j){
+		for(int j=padding_processes; j<mpi_size; ++j){
 			decomp_.frequencies[0].process_ids[j] = j;
 		}
-		decomp_.frequencies[0].lower_process = 0;
+		decomp_.frequencies[0].lower_process = padding_processes;
 		decomp_.frequencies[0].upper_process = mpi_size-1;
 
 	}
@@ -107,17 +108,17 @@ void Decomposition::decompose_primal_dual(bool const freq_decomp, bool const tim
 	//! knows what parts of the calculation it is involved with.
 	build_my_decomposition();
 
-	if(not quiet){
-		report_on_decomposition();
-	}
+	report_on_decomposition(quiet);
+
 
 }
 
 //! Calculate what frequencies a processor is assigned.
 int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lower_process, t_uint upper_process, bool time_decomp, bool subblock_decomp, bool wavelet_decomp){
 
-	//! 1 is added here to account for the upper_process number being inclusive (i.e. it includes the highest process rank involved).
-	t_uint number_of_processes = upper_process - lower_process + 1;
+	//! We add one on here to account for the calculation being inclusive, i.e. including the top number, so if we have 8 processes then the
+	//! top number is 7, the lower number is 0, which would mean the number_of_processes would equal 7 if we didn't add one.
+	t_uint number_of_processes = (upper_process - lower_process) + 1;
 
 	//! We only have a single frequency here
 	//! Time block decomp data, i.e. time blocks this process is involved with from this frequency
@@ -139,7 +140,7 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 		if(number_of_frequencies % available_processes != 0){
 			large_block_size = large_block_size + 1;
 			for(int i = 0; i < available_processes; i++){
-				int potential_size = (i+1)*large_block_size + ((available_processes - (1+i))*small_block_size);
+				int potential_size = (i+1)*large_block_size + ((available_processes - (i+1))*small_block_size);
 				if(potential_size == number_of_frequencies or potential_size == number_of_frequencies - 1 or potential_size == number_of_frequencies + 1){
 					large_block_limit = i;
 					break;
@@ -163,14 +164,14 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 			if(i == available_processes - 1){
 				loop_limit = number_of_frequencies;
 			}else{
-				//! Set the maximum number of frequencies for this process (this i)
+				//! Set the maximum number of frequencies for this process
 				if(i <= large_block_limit){
 					loop_limit = loop_limit + large_block_size;
 				}else{
 					loop_limit = loop_limit + small_block_size;
 				}
 			}
-			//! Assign the frequencies to the current process (this i)
+			//! Assign the frequencies to the current process
 			for(int j = current_frequency; j < std::min(loop_limit,number_of_frequencies); j++){
 				decomp_.frequencies[current_frequency].freq_number = current_frequency;
 				decomp_.frequencies[current_frequency].global_owner = i + lower_process;
@@ -209,7 +210,7 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 			//! not exact. We assume that having the block of processes for the last frequency as slightly smaller or larger than the other blocks is ok in terms of
 			//! load balance.
 			for(int i = 0; i < number_of_frequencies; i++){
-				int potential_size = (i+1)*large_block_size + ((number_of_frequencies - (1+i))*small_block_size);
+				int potential_size = (i+1)*large_block_size + ((number_of_frequencies - (i+1))*small_block_size);
 				if(potential_size == available_processes or potential_size == available_processes - 1 or potential_size == available_processes + 1 or potential_size > available_processes + 1){
 					large_block_limit = i;
 					break;
@@ -219,7 +220,10 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 		}
 
 		available_processes = 0;
-		int current_lower_process = 0;
+		int current_lower_process = lower_process;
+		//! extra_processes_to_add is used to add in the padding processes to the first frequency to ensuring rank 0 has the space for
+		//! more memory. It is set to padding processes at the beginning of the frequency loop, but then reset to zero for the rest of the frequencies
+		//! as they simply depend on the value of upper_process for the preceding frequency, which will already include the padding.
 		for(int k=0; k<number_of_frequencies; ++k){
 			decomp_.frequencies[k].freq_number = k;
 			decomp_.frequencies[k].lower_process = current_lower_process;
@@ -227,16 +231,10 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 			//! are of the small block size
 			if(k > large_block_limit){
 				decomp_.frequencies[k].upper_process = current_lower_process + small_block_size;
-				//! Account for the fact that rank 0 does not contribute to the block size because it's id is 0
-				if(current_lower_process != 0){
-					decomp_.frequencies[k].upper_process--;
-				}
+				decomp_.frequencies[k].upper_process--;
 			}else{
-				decomp_.frequencies[k].upper_process = current_lower_process + large_block_size - 1;
-				//! Account for the fact that rank 0 does not contribute to the block size because it's id is 0
-				if(current_lower_process != 0){
-					decomp_.frequencies[k].upper_process--;
-				}
+				decomp_.frequencies[k].upper_process = current_lower_process + large_block_size;
+				decomp_.frequencies[k].upper_process--;
 			}
 			assert(decomp_.frequencies[k].upper_process >= decomp_.frequencies[k].lower_process);
 			current_lower_process = decomp_.frequencies[k].upper_process + 1;
@@ -250,7 +248,6 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 			//! We choose the global owner as the lowest rank process (in the global communicator) that is
 			//! involved with this frequency.
 			decomp_.frequencies[k].global_owner = decomp_.frequencies[k].lower_process;
-
 		}
 
 	}
@@ -267,7 +264,7 @@ int Decomposition::decompose_frequencies(t_uint number_of_frequencies, t_uint lo
 		}
 	}
 
-	return available_processes;
+	return(available_processes);
 }
 
 //! Calculate what processes own the time blocks associated with a given frequency.
@@ -303,7 +300,7 @@ int Decomposition::decompose_time_blocks(t_uint freq_number, t_uint number_of_bl
 		if(number_of_blocks % available_processes != 0){
 			large_block_size = large_block_size + 1;
 			for(int i = 0; i < available_processes; i++){
-				int potential_size = (i+1)*large_block_size + ((available_processes - (1+i))*small_block_size);
+				int potential_size = (i+1)*large_block_size + ((available_processes - (i+1))*small_block_size);
 				if(potential_size == number_of_blocks or potential_size == number_of_blocks - 1 or potential_size == number_of_blocks + 1){
 					large_block_limit = i;
 					break;
@@ -358,7 +355,7 @@ int Decomposition::decompose_time_blocks(t_uint freq_number, t_uint number_of_bl
 	}
 
 
-	return available_processes;
+	return(available_processes);
 }
 
 
@@ -393,7 +390,7 @@ int Decomposition::decompose_wavelets(t_uint freq_number, t_uint number_of_wavel
 		if(number_of_wavelets % available_processes != 0){
 			large_block_size = large_block_size + 1;
 			for(int i = 0; i < available_processes; i++){
-				int potential_size = (i+1)*large_block_size + ((available_processes - (1+i))*small_block_size);
+				int potential_size = (i+1)*large_block_size + ((available_processes - (i+1))*small_block_size);
 				if(potential_size == number_of_wavelets or potential_size == number_of_wavelets - 1 or potential_size == number_of_wavelets + 1){
 					large_block_limit = i;
 					break;
@@ -449,11 +446,11 @@ int Decomposition::decompose_wavelets(t_uint freq_number, t_uint number_of_wavel
 		decomp_.frequencies[freq_number].global_wavelet_owner = decomp_.frequencies[freq_number].wavelets[0].global_owner;
 	}
 
-	return available_processes;
+	return(available_processes);
 }
 
 
-//! Calculate what processes own the wavelets associated with the root process specific work (i.e. wavelet regularisatoin and similiar)
+//! Calculate what processes own the wavelets associated with the root process specific work (i.e. wavelet regularisation and similar)
 void Decomposition::decompose_root_wavelets(int number_of_wavelets, bool root_wavelet_decomp){
 
 	t_uint number_of_processes;
@@ -464,7 +461,8 @@ void Decomposition::decompose_root_wavelets(int number_of_wavelets, bool root_wa
 	if(!root_wavelet_decomp){
 		number_of_processes = 1;
 	}else{
-		number_of_processes = std::min(int(decomp_.global_comm.size()),number_of_wavelets);
+		//! the decomposition zero frequency rank here is used to deal with process padding
+		number_of_processes = std::min(int(decomp_.global_comm.size() - decomp_.frequencies[0].lower_process), number_of_wavelets);
 	}
 	//! Wavelet decomp data, i.e. wavelets for the root process work
 	decomp_.root_wavelets = std::vector<WaveletDecomp>(number_of_wavelets);
@@ -483,7 +481,7 @@ void Decomposition::decompose_root_wavelets(int number_of_wavelets, bool root_wa
 		if(number_of_wavelets % available_processes != 0){
 			large_block_size = large_block_size + 1;
 			for(int i = 0; i < available_processes; i++){
-				int potential_size = (i+1)*large_block_size + ((available_processes - (1+i))*small_block_size);
+				int potential_size = (i+1)*large_block_size + ((available_processes - (i+1))*small_block_size);
 				if(potential_size == number_of_wavelets or potential_size == number_of_wavelets - 1 or potential_size == number_of_wavelets + 1){
 					large_block_limit = i;
 					break;
@@ -517,7 +515,7 @@ void Decomposition::decompose_root_wavelets(int number_of_wavelets, bool root_wa
 			//! Assign the blocks to the current process (this i)
 			for(int j = current_wavelet; j < std::min(loop_limit,number_of_wavelets); j++){
 				decomp_.root_wavelets[j].wavelet_number = j;
-				decomp_.root_wavelets[j].global_owner = i;
+				decomp_.root_wavelets[j].global_owner = i + decomp_.frequencies[0].lower_process;
 				current_wavelet = current_wavelet + 1;
 			}
 		}
@@ -610,6 +608,7 @@ void Decomposition::build_my_decomposition(){
 		if(decomp_.parallel_mpi){
 			if(in_this_frequency == 1){
 				decomp_.frequencies[i].in_this_frequency = true;
+				my_decomp_.frequencies[number_of_my_frequencies-1].in_this_frequency = true;
 				my_decomp_.frequencies[number_of_my_frequencies-1].freq_comm = Communicator(decomp_.global_comm.split(in_this_frequency));
 				my_decomp_.frequencies[number_of_my_frequencies-1].local_owner = my_decomp_.frequencies[number_of_my_frequencies-1].freq_comm.root_id();
 			}else{
@@ -633,13 +632,51 @@ void Decomposition::build_my_decomposition(){
 	}
 
 	my_decomp_.number_of_frequencies = number_of_my_frequencies;
+
+	//! The following code creates communicators to go across frequency wavelets.
+	//! The idea is that each wavelet owner should be in the communicator for all frequencies, i.e. there will be single communicator
+	//! per wavelet containing all the processes that own that wavelet across all frequencies. This is required for the l21 calculation.
+	//! This code assumes all frequencies have the same number of wavelets. It should be a safe assumption, but we put in an assert just in case.
+	std::vector<t_uint> wavelets;
+	if(my_decomp_.number_of_frequencies != 0){
+		wavelets = std::vector<t_uint>(decomp_.frequencies[0].number_of_wavelets, 0);
+		for(int i=0; i<my_decomp_.number_of_frequencies; i++){
+			// Check the wavelets array is the correct size;
+			assert(decomp_.frequencies[i].number_of_wavelets == decomp_.frequencies[0].number_of_wavelets);
+			for(int j=0; j<my_decomp_.frequencies[i].number_of_wavelets; j++){
+				if(my_decomp_.frequencies[i].wavelets[j].global_owner == my_rank){
+					wavelets[j] = 1;
+				}
+			}
+		}
+
+
+		//! This code creates the communicators based on the information calculated above
+		my_decomp_.wavelet_comms = std::vector<Communicator>(decomp_.frequencies[0].number_of_wavelets);
+		my_decomp_.wavelet_comms_involvement = std::vector<bool>(decomp_.frequencies[0].number_of_wavelets);
+	}
+
+	for(int i=0; i<decomp_.frequencies[0].number_of_wavelets; i++){
+		if(my_decomp_.number_of_frequencies != 0 and wavelets[i] == 1){
+			my_decomp_.wavelet_comms[i] = Communicator(decomp_.global_comm.split(wavelets[i]));
+			my_decomp_.wavelet_comms_involvement[i] = true;
+		}else{
+			//Split for those not in the wavelet on any frequency. This should automatically deallocate the communicator when the routine finishes as it will go out of scope.
+			Communicator temp_comm = Communicator(decomp_.global_comm.split(0));
+			if(my_decomp_.number_of_frequencies != 0){
+				my_decomp_.wavelet_comms_involvement[i] = false;
+			}
+		}
+	}
+
+
 	my_decomp_.checkpointing = decomp_.checkpointing;
 	my_decomp_.checkpointing_frequency = decomp_.checkpointing_frequency;
 
 }
 
 //! Print out summary statistics on the decomposition.
-void Decomposition::report_on_decomposition(){
+void Decomposition::report_on_decomposition(bool quiet){
 
 
 	if(decomp_.parallel_mpi){
@@ -655,149 +692,165 @@ void Decomposition::report_on_decomposition(){
 			PSI_HIGH_LOG("Each MPI process has {} OpenMP threads", num_threads);
 #endif
 
-			if(decomp_.freq_decomp){
+			if(not quiet){
 
-				int min_size = 0;
-				int max_size = 0;
+				if(decomp_.freq_decomp){
+
+					int min_size = 0;
+					int max_size = 0;
+					for(int fr=0; fr<decomp_.number_of_frequencies; fr++){
+						int freq_size = decomp_.frequencies[fr].process_ids.size();
+						if(freq_size < min_size or min_size == 0){
+							min_size = freq_size;
+						}
+						if(freq_size > max_size){
+							max_size = freq_size;
+						}
+					}
+
+					//! Calculate the relative difference between the biggest and smallest blocks assigned to processes or blocks of processes. This
+					//! gives us a crude measure of load imbalance as it ignore how many blocks there are
+
+					float unbalance;
+					if(max_size == 0){
+						unbalance = 1.0;
+					}else{
+						unbalance = min_size/(float)max_size;
+					}
+					unbalance = 100*(1 - unbalance);
+					PSI_HIGH_LOG("Number of frequencies: {}",decomp_.number_of_frequencies);
+					PSI_HIGH_LOG("Largest block size: {} Smallest block size: {}",max_size,min_size);
+					PSI_HIGH_LOG("Percentage difference largest and smallest number of blocks {}%",unbalance);
+				}else{
+					PSI_HIGH_LOG("Number of frequencies: {}",decomp_.number_of_frequencies);
+					PSI_HIGH_LOG("Frequencies have not been parallelised, but time blocks and wavelets may have");
+				}
 				for(int fr=0; fr<decomp_.number_of_frequencies; fr++){
-					int freq_size = decomp_.frequencies[fr].process_ids.size();
-					if(freq_size < min_size or min_size == 0){
-						min_size = freq_size;
-					}
-					if(freq_size > max_size){
-						max_size = freq_size;
+					PSI_HIGH_LOG("Assignment of processes for frequency[{}]:",decomp_.frequencies[fr].freq_number);
+					for(int p=0; p<decomp_.frequencies[fr].process_ids.size();p++){
+						PSI_HIGH_LOG("{}",decomp_.frequencies[fr].process_ids[p]);
 					}
 				}
 
-				//! Calculate the relative difference between the biggest and smallest blocks assigned to processes or blocks of processes. This
-				//! gives us a crude measure of load imbalance as it ignore how many blocks there are
 
-				float unbalance;
-				if(max_size == 0){
-					unbalance = 1.0;
+				if(decomp_.root_wavelet_decomp){
+					int num_wavelets = decomp_.number_of_root_wavelets;
+					PSI_HIGH_LOG("Number of root wavelets: {}",num_wavelets);
+					PSI_HIGH_LOG("Assignment of processes for root wavelets:");
+					for(int wave=0; wave<num_wavelets; wave++){
+						PSI_HIGH_LOG("{} ", decomp_.root_wavelets[wave].global_owner);
+					}
 				}else{
-					unbalance = min_size/(float)max_size;
+					int num_wavelets = decomp_.number_of_root_wavelets;
+					PSI_HIGH_LOG("Number of root wavelets: {}",num_wavelets);
+					PSI_HIGH_LOG("All root wavelets are being calculated by a single process");
 				}
-				unbalance = 100*(1 - unbalance);
-				PSI_HIGH_LOG("Number of frequencies: {}",decomp_.number_of_frequencies);
-				PSI_HIGH_LOG("Largest block size: {} Smallest block size: {}",max_size,min_size);
-				PSI_HIGH_LOG("Percentage difference largest and smallest number of blocks {}%",unbalance);
-			}else{
-				PSI_HIGH_LOG("Number of frequencies: {}",decomp_.number_of_frequencies);
-				PSI_HIGH_LOG("Frequencies have not been parallelised, but time blocks and wavelets may have");
-			}
-			for(int fr=0; fr<decomp_.number_of_frequencies; fr++){
-				PSI_LOW_LOG("Assignment of processes for frequency[{}]:",decomp_.frequencies[fr].freq_number);
-				for(int p=0; p<decomp_.frequencies[fr].process_ids.size();p++){
-					PSI_LOW_LOG("{}",decomp_.frequencies[fr].process_ids[p]);
-				}
-			}
 
-			for(int fr=0; fr<decomp_.number_of_frequencies; fr++){
-				if(decomp_.time_decomp){
-					t_int time_block_min_size = 0;
-					t_int time_block_max_size = 0;
-					t_int time_block_number_of_splits = 1;
-					t_int time_block_current_total = 0;
-					t_int time_block_current_process;
-					time_block_current_process = (int)decomp_.frequencies[fr].time_blocks[0].global_owner;
-					for(int k=0; k<decomp_.frequencies[fr].time_blocks.size(); k++){
-						if((int)decomp_.frequencies[fr].time_blocks[k].global_owner == time_block_current_process){
-							time_block_current_total++;
-						}else{
-							if(time_block_current_total < time_block_min_size or time_block_min_size == 0){
-								time_block_min_size = time_block_current_total;
+				for(int fr=0; fr<decomp_.number_of_frequencies; fr++){
+					if(decomp_.time_decomp){
+						t_int time_block_min_size = 0;
+						t_int time_block_max_size = 0;
+						t_int time_block_number_of_splits = 1;
+						t_int time_block_current_total = 0;
+						t_int time_block_current_process;
+						time_block_current_process = (int)decomp_.frequencies[fr].time_blocks[0].global_owner;
+						for(int k=0; k<decomp_.frequencies[fr].time_blocks.size(); k++){
+							if((int)decomp_.frequencies[fr].time_blocks[k].global_owner == time_block_current_process){
+								time_block_current_total++;
+							}else{
+								if(time_block_current_total < time_block_min_size or time_block_min_size == 0){
+									time_block_min_size = time_block_current_total;
+								}
+								if(time_block_current_total > time_block_max_size){
+									time_block_max_size = time_block_current_total;
+								}
+								time_block_current_process = (int)decomp_.frequencies[fr].time_blocks[k].global_owner;
+								time_block_number_of_splits++;
+								time_block_current_total = 1;
 							}
-							if(time_block_current_total > time_block_max_size){
-								time_block_max_size = time_block_current_total;
-							}
-							time_block_current_process = (int)decomp_.frequencies[fr].time_blocks[k].global_owner;
-							time_block_number_of_splits++;
-							time_block_current_total = 1;
 						}
-					}
-					//! Check if the last block is the smallest or biggest we've encountered
-					if(time_block_current_total < time_block_min_size or time_block_min_size == 0){
-						time_block_min_size = time_block_current_total;
-					}
-					if(time_block_current_total > time_block_max_size){
-						time_block_max_size = time_block_current_total;
-					}
-
-					//! Calculate the relative difference between the biggest and smallest blocks assigned to processes. This
-					//! gives us a crude measure of load imbalance (currently ignoring the actual size of each block).
-
-					float time_block_unbalance;
-					if(time_block_max_size == 0){
-						time_block_unbalance = 1.0;
-					}else{
-						time_block_unbalance = time_block_min_size/(float)time_block_max_size;
-					}
-					time_block_unbalance = 100*(1 - time_block_unbalance);
-					int block_size = decomp_.frequencies[fr].time_blocks.size();
-					PSI_HIGH_LOG("Number of time blocks for frequency[{}]: {}",fr,block_size);
-					PSI_HIGH_LOG("Largest block size: {} Smallest block size: {} Number of processes used: {}",time_block_max_size,time_block_min_size,time_block_number_of_splits);
-					PSI_HIGH_LOG("Percentage difference largest and smallest number of blocks assigned to a process {}%",time_block_unbalance);
-					if(time_block_current_process != (t_int)decomp_.frequencies[fr].upper_process){
-						int idle = decomp_.frequencies[fr].upper_process - time_block_current_process;
-						PSI_HIGH_LOG("{} processes idle for this set of time blocks", idle);
-					}
-
-				}else{
-					int block_size = decomp_.frequencies[fr].time_blocks.size();
-					PSI_HIGH_LOG("Number of time blocks for frequency[{}]: {}",fr,block_size);
-					PSI_HIGH_LOG("All time blocks for this frequency are being calculated by a single process");
-				}
-				if(decomp_.wavelet_decomp){
-					t_int wavelet_min_size = 0;
-					t_int wavelet_max_size = 0;
-					t_int wavelet_number_of_splits = 1;
-					t_int wavelet_current_total = 0;
-					t_int wavelet_current_process;
-					wavelet_current_process = decomp_.frequencies[fr].wavelets[0].global_owner;
-					for(int k=0; k<decomp_.frequencies[fr].number_of_wavelets; k++){
-						if(decomp_.frequencies[fr].wavelets[k].global_owner == wavelet_current_process){
-							wavelet_current_total++;
-						}else{
-							if(wavelet_current_total < wavelet_min_size or wavelet_min_size == 0){
-								wavelet_min_size = wavelet_current_total;
-							}
-							if(wavelet_current_total > wavelet_max_size){
-								wavelet_max_size = wavelet_current_total;
-							}
-							wavelet_current_process = decomp_.frequencies[fr].wavelets[k].global_owner;
-							wavelet_number_of_splits++;
-							wavelet_current_total = 1;
+						//! Check if the last block is the smallest or biggest we've encountered
+						if(time_block_current_total < time_block_min_size or time_block_min_size == 0){
+							time_block_min_size = time_block_current_total;
 						}
-					}
-					//! Check if the last block is the smallest or biggest we've encountered
-					if(wavelet_current_total < wavelet_min_size or wavelet_min_size == 0){
-						wavelet_min_size = wavelet_current_total;
-					}
-					if(wavelet_current_total > wavelet_max_size){
-						wavelet_max_size = wavelet_current_total;
-					}
+						if(time_block_current_total > time_block_max_size){
+							time_block_max_size = time_block_current_total;
+						}
 
-					//! Calculate the relative difference between the biggest and smallest blocks assigned to processes. This
-					//! gives us a crude measure of load imbalance.
-					float wavelet_unbalance;
-					if(wavelet_max_size == 0){
-						wavelet_unbalance = 1.0;
+						//! Calculate the relative difference between the biggest and smallest blocks assigned to processes. This
+						//! gives us a crude measure of load imbalance (currently ignoring the actual size of each block).
+
+						float time_block_unbalance;
+						if(time_block_max_size == 0){
+							time_block_unbalance = 1.0;
+						}else{
+							time_block_unbalance = time_block_min_size/(float)time_block_max_size;
+						}
+						time_block_unbalance = 100*(1 - time_block_unbalance);
+						int block_size = decomp_.frequencies[fr].time_blocks.size();
+						PSI_HIGH_LOG("Number of time blocks for frequency[{}]: {}",fr,block_size);
+						PSI_HIGH_LOG("Largest block size: {} Smallest block size: {} Number of processes used: {}",time_block_max_size,time_block_min_size,time_block_number_of_splits);
+						PSI_HIGH_LOG("Percentage difference largest and smallest number of blocks assigned to a process {}%",time_block_unbalance);
+						if(time_block_current_process != (t_int)decomp_.frequencies[fr].upper_process){
+							int idle = decomp_.frequencies[fr].upper_process - time_block_current_process;
+							PSI_HIGH_LOG("{} processes idle for this set of time blocks", idle);
+						}
+
 					}else{
-						wavelet_unbalance = wavelet_min_size/(float)wavelet_max_size;
+						int block_size = decomp_.frequencies[fr].time_blocks.size();
+						PSI_HIGH_LOG("Number of time blocks for frequency[{}]: {}",fr,block_size);
+						PSI_HIGH_LOG("All time blocks for this frequency are being calculated by a single process");
 					}
-					wavelet_unbalance = 100*(1 - wavelet_unbalance);
-					int num_wavelets = decomp_.frequencies[fr].number_of_wavelets;
-					PSI_HIGH_LOG("Number of wavelets for frequency[{}]: {}",fr,num_wavelets);
-					PSI_HIGH_LOG("Largest block of wavelets: {} Smallest of wavelets: {} Number of processes used: {}",wavelet_max_size,wavelet_min_size,wavelet_number_of_splits);
-					PSI_HIGH_LOG("Percentage difference largest and smallest number of wavelets assigned to a process {}%",wavelet_unbalance);
-				}else{
-					int num_wavelets = decomp_.frequencies[fr].number_of_wavelets;
-					PSI_HIGH_LOG("Number of wavelets for frequency[{}]: {}",fr,num_wavelets);
-					PSI_HIGH_LOG("All wavelets for this frequency are being calculated by a single process");
+					if(decomp_.wavelet_decomp){
+						t_int wavelet_min_size = 0;
+						t_int wavelet_max_size = 0;
+						t_int wavelet_number_of_splits = 1;
+						t_int wavelet_current_total = 0;
+						t_int wavelet_current_process;
+						wavelet_current_process = decomp_.frequencies[fr].wavelets[0].global_owner;
+						for(int k=0; k<decomp_.frequencies[fr].number_of_wavelets; k++){
+							if(decomp_.frequencies[fr].wavelets[k].global_owner == wavelet_current_process){
+								wavelet_current_total++;
+							}else{
+								if(wavelet_current_total < wavelet_min_size or wavelet_min_size == 0){
+									wavelet_min_size = wavelet_current_total;
+								}
+								if(wavelet_current_total > wavelet_max_size){
+									wavelet_max_size = wavelet_current_total;
+								}
+								wavelet_current_process = decomp_.frequencies[fr].wavelets[k].global_owner;
+								wavelet_number_of_splits++;
+								wavelet_current_total = 1;
+							}
+						}
+						//! Check if the last block is the smallest or biggest we've encountered
+						if(wavelet_current_total < wavelet_min_size or wavelet_min_size == 0){
+							wavelet_min_size = wavelet_current_total;
+						}
+						if(wavelet_current_total > wavelet_max_size){
+							wavelet_max_size = wavelet_current_total;
+						}
+
+						//! Calculate the relative difference between the biggest and smallest blocks assigned to processes. This
+						//! gives us a crude measure of load imbalance.
+						float wavelet_unbalance;
+						if(wavelet_max_size == 0){
+							wavelet_unbalance = 1.0;
+						}else{
+							wavelet_unbalance = wavelet_min_size/(float)wavelet_max_size;
+						}
+						wavelet_unbalance = 100*(1 - wavelet_unbalance);
+						int num_wavelets = decomp_.frequencies[fr].number_of_wavelets;
+						PSI_HIGH_LOG("Number of wavelets for frequency[{}]: {}",fr,num_wavelets);
+						PSI_HIGH_LOG("Largest block of wavelets: {} Smallest of wavelets: {} Number of processes used: {}",wavelet_max_size,wavelet_min_size,wavelet_number_of_splits);
+						PSI_HIGH_LOG("Percentage difference largest and smallest number of wavelets assigned to a process {}%",wavelet_unbalance);
+					}else{
+						int num_wavelets = decomp_.frequencies[fr].number_of_wavelets;
+						PSI_HIGH_LOG("Number of wavelets for frequency[{}]: {}",fr,num_wavelets);
+						PSI_HIGH_LOG("All wavelets for this frequency are being calculated by a single process");
+					}
 				}
 			}
-
 		}
 	}
 
@@ -809,7 +862,7 @@ bool Decomposition::checkpoint_now(t_uint niters, t_uint maxiters) const{
 	bool frequency = false;
 
 	if(not decomp_.checkpointing){
-		return false;
+		return(false);
 	}
 
 	if(decomp_.checkpointing_frequency != 0){
@@ -821,12 +874,12 @@ bool Decomposition::checkpoint_now(t_uint niters, t_uint maxiters) const{
 		//! Checkpoint at the end of the algorithm is checkpointing_frequency set to 0.
 		frequency = ((niters + 1) == maxiters);
 	}
-	return frequency;
+	return(frequency);
 }
 
 bool Decomposition::restore_checkpoint() const{
 
-	return decomp_.restoring and not decomp_.checkpoint_restored;
+	return(decomp_.restoring and not decomp_.checkpoint_restored);
 
 }
 
@@ -871,7 +924,7 @@ void Decomposition::wait_on_requests(int freq, int count){
 
 	if(not decomp_.frequencies[freq].requests_initialised){
 		PSI_ERROR("Attempting to wait the decomposition requests array when it has not been initialised. This is a mistake.");
-	}else if(not decomp_.global_comm.is_root()){
+	}else if(not decomp_.global_comm.is_root() and not decomp_.frequencies[freq].freq_comm.is_root()){
 		PSI_ERROR("Wait called by wrong process, should only be called by the frequency root");
 	}else{
 		decomp_.global_comm.wait_on_all(decomp_.frequencies[freq].requests, count);

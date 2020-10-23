@@ -393,7 +393,7 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 
 	// x_bar should be on the wavelet process(es)
 	if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
-		x_bar =  decomp().my_root_wavelet_comm().broadcast(x_bar, decomp().global_comm().root_id());
+		x_bar =  decomp().my_root_wavelet_comm().broadcast(x_bar, decomp().my_root_wavelet_comm().root_id());
 	}
 
 	Matrix<t_complex> x_hat;
@@ -451,18 +451,19 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 		auto imsizey = Phi()[0]->imsizey();
 		auto imsizex = Phi()[0]->imsizex();
 #pragma omp parallel for default(shared)
-		for(int i=0;i<decomp().frequencies()[0].number_of_time_blocks;i++){
-			x_hat_global[i] = Eigen::SparseMatrix<t_complex>(oversample_factor * imsizey * oversample_factor * imsizex, 1);
-			x_hat_global[i].reserve(global_indices[0][i].rows());
-			for (int k=0; k<global_indices[0][i].rows(); k++){
-				x_hat_global[i].insert(global_indices[0][i](k),0) = x_hat(global_indices[0][i](k),0);
+		for(int t=0;t<decomp().frequencies()[0].number_of_time_blocks;t++){
+			x_hat_global[t] = Eigen::SparseMatrix<t_complex>(oversample_factor * imsizey * oversample_factor * imsizex, 1);
+			x_hat_global[t].reserve(global_indices[0][t].rows());
+			for (int k=0; k<global_indices[0][t].rows(); k++){
+				x_hat_global[t].insert(global_indices[0][t](k),0) = x_hat(global_indices[0][t](k),0);
 			}
-			x_hat_global[i].makeCompressed();
+			x_hat_global[t].makeCompressed();
 		}
 		int my_index = 0;
 		bool used_this_freq = false;
-		for(int i=0;i<decomp().frequencies()[0].number_of_time_blocks;i++){
-			decomp_.template send_fourier_data<t_complex>(x_hat_sparse, x_hat_global, &shapes[i][0], i, my_index, 0, used_this_freq, true);
+		for(int t=0;t<decomp().frequencies()[0].number_of_time_blocks;t++){
+			PSI_HIGH_LOG("Sending frequency root time block to frequency workers:{} {} {}",t,x_hat.size(),x_hat_global[t].nonZeros());
+			decomp_.template send_fourier_data<t_complex>(x_hat_sparse, x_hat_global, &shapes[t][0], t, my_index, 0, used_this_freq, true);
 		}
 	}
 
@@ -524,7 +525,7 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 
 	// NEED TO REDUCE Phit_v to root here.
 	if(decomp().parallel_mpi()){
-		decomp().my_frequencies()[0].freq_comm.distributed_sum(Phit_v,decomp().global_comm().root_id());
+		decomp().my_frequencies()[0].freq_comm.distributed_sum(Phit_v,decomp().my_frequencies()[0].freq_comm.root_id());
 	}
 
 	Matrix<t_complex> out_hat;
@@ -546,7 +547,7 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 		// Psi_u now needs to be communicated to the root process
 		// COMMUNICATION
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
-			decomp().my_root_wavelet_comm().distributed_sum(Psi_u,decomp().global_comm().root_id());
+			decomp().my_root_wavelet_comm().distributed_sum(Psi_u,decomp().my_root_wavelet_comm().root_id());
 		}
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
@@ -587,18 +588,19 @@ void PrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out, std::vector<t
 		auto imsizey = Phi()[0]->imsizey();
 		auto imsizex = Phi()[0]->imsizex();
 #pragma omp parallel for default(shared)
-		for(int i=0;i<decomp().frequencies()[0].number_of_time_blocks;i++){
-			out_hat_global[i] = Eigen::SparseMatrix<t_complex>(oversample_factor * imsizey * oversample_factor * imsizex, 1);
-			out_hat_global[i].reserve(global_indices[0][i].rows());
-			for (int k=0; k<global_indices[0][i].rows(); k++){
-				out_hat_global[i].insert(global_indices[0][i](k),0) = out_hat(global_indices[0][i](k),0);
+		for(int t=0;t<decomp().frequencies()[0].number_of_time_blocks;t++){
+			out_hat_global[t] = Eigen::SparseMatrix<t_complex>(oversample_factor * imsizey * oversample_factor * imsizex, 1);
+			out_hat_global[t].reserve(global_indices[0][t].rows());
+			for (int k=0; k<global_indices[0][t].rows(); k++){
+				out_hat_global[t].insert(global_indices[0][t](k),0) = out_hat(global_indices[0][t](k),0);
 			}
-			out_hat_global[i].makeCompressed();
+			out_hat_global[t].makeCompressed();
 		}
 		int my_index = 0;
 		bool used_this_freq = false;
-		for(int i=0;i<decomp().frequencies()[0].number_of_time_blocks;i++){
-			decomp_.template send_fourier_data<t_complex>(out_hat_sparse, out_hat_global, &shapes[i][0], i, my_index, 0, used_this_freq, true);
+		for(int t=0;t<decomp().frequencies()[0].number_of_time_blocks;t++){
+			PSI_HIGH_LOG("Sending out root time block to frequency workers: {} {} {}",t,out_hat.size(),out_hat_global[t].nonZeros());
+			decomp_.template send_fourier_data<t_complex>(out_hat_sparse, out_hat_global, &shapes[t][0], t, my_index, 0, used_this_freq, true);
 		}
 	}
 
@@ -647,11 +649,11 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 	if(full_convergence_test){
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 			if(decomp().my_root_wavelet_comm().size() != 1){
-				out = decomp().my_root_wavelet_comm().broadcast(out, decomp().global_comm().root_id());
+				out = decomp().my_root_wavelet_comm().broadcast(out, decomp().my_root_wavelet_comm().root_id());
 			}
 			Real temp_objective = psi::l1_norm(Psi().adjoint() * out, l1_proximal_weights());
 			if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1){
-				decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().global_comm().root_id());
+				decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().my_root_wavelet_comm().root_id());
 			}
 			if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 				objectives = {temp_objective, 0.};
@@ -703,11 +705,11 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 			// Could be parallelised with the wavelet processes but that would require out to be distributed here
 			if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 				if(decomp().my_root_wavelet_comm().size() != 1){
-					out = decomp().my_root_wavelet_comm().broadcast(out, decomp().global_comm().root_id());
+					out = decomp().my_root_wavelet_comm().broadcast(out, decomp().my_root_wavelet_comm().root_id());
 				}
 				Real temp_objective = psi::l1_norm(Psi().adjoint() * out, l1_proximal_weights());
 				if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1){
-					decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().global_comm().root_id());
+					decomp().my_root_wavelet_comm().distributed_sum(&temp_objective,decomp().my_root_wavelet_comm().root_id());
 				}
 				if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 					objectives.first = temp_objective;
@@ -726,7 +728,7 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 
 		}
 
-		rel_x_check = decomp().my_frequencies()[0].freq_comm.broadcast(rel_x_check, decomp().global_comm().root_id());
+		rel_x_check = decomp().my_frequencies()[0].freq_comm.broadcast(rel_x_check, decomp().my_root_wavelet_comm().root_id());
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 
@@ -764,7 +766,7 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector &u_guess, std::vecto
 			}else{
 				temp_converged = 0;
 			}
-			temp_converged = decomp().my_frequencies()[0].freq_comm.broadcast(temp_converged, decomp().global_comm().root_id());
+			temp_converged = decomp().my_frequencies()[0].freq_comm.broadcast(temp_converged, decomp().my_root_wavelet_comm().root_id());
 			if(temp_converged == 1){
 				converged = true;
 			}else{

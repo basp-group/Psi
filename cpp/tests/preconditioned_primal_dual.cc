@@ -1,6 +1,6 @@
 #include <catch2/catch.hpp>
 #include <random>
-
+#include <ctime>
 #include <assert.h>
 
 #include <Eigen/Dense>

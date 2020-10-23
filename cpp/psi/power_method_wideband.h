@@ -181,7 +181,7 @@ operator()(OperatorFunction<t_Matrix> const &op, t_Matrix const &input) const {
 		converged = rel_val < tolerance();
 
 		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
-			PSI_HIGH_LOG("    - Iteration {}/{} -- norm: {}", niters, itermax(), magnitude);
+			PSI_HIGH_LOG("    - Power Method Wideband Iteration {}/{} -- norm: {}", niters, itermax(), magnitude);
 		}
 
 		eigenvector /= magnitude;
@@ -191,9 +191,9 @@ operator()(OperatorFunction<t_Matrix> const &op, t_Matrix const &input) const {
 	// check function exists, otherwise, don't know if convergence is meaningful
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		if(not converged) {
-			PSI_WARN("    - did not converge within {} iterations", itermax());
+			PSI_WARN("    - Power Method Wideband did not converge within {} iterations", itermax());
 		} else {
-			PSI_INFO("    - converged in {} of {} iterations", niters, itermax());
+			PSI_INFO("    - Power Method Wideband converged in {} of {} iterations", niters, itermax());
 		}
 	}
 	return DiagnosticAndResult{itermax(), converged, previous_magnitude, eigenvector.normalized()};

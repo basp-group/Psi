@@ -6,6 +6,7 @@
 #include "psi/linear_transform.h"
 #include "psi/types.h"
 #include "psi/mpi/decomposition.h"
+#include "psi/mpi/scalapack.h"
 
 namespace psi {
 namespace algorithm {
@@ -14,7 +15,7 @@ template <class ALGORITHM> class Reweighted;
 //! Factory function to create an l0-approximation by reweighting an l1 norm
 template <class ALGORITHM>
 Reweighted<ALGORITHM>
-reweighted(ALGORITHM const &algo, typename Reweighted<ALGORITHM>::t_ReweighteeMat const &reweighteeL21, typename Reweighted<ALGORITHM>::t_ReweighteeVec const &reweighteeNuclear);
+reweighted(ALGORITHM const &algo, typename Reweighted<ALGORITHM>::t_ReweighteeMat const &reweighteeL21);
 
 //! \brief L0-approximation algorithm, through reweighting
 //! \details This algorithm approximates \f$min_x ||Ψ^Tx||_0 + f(x)\f$ by solving the set of
@@ -56,18 +57,16 @@ public:
 
 		//! Whether convergence was achieved
 		bool good;
-		//! Weights at last iteration
-		WeightVector weightsL21;
-		WeightVector weightsNuclear;
+
 		//! Result from last inner loop
 		typename Algorithm::DiagnosticAndResult algo;
 		//! Default construction
-		ReweightedResult() : niters(0), good(false), weightsL21(WeightVector::Ones(1)), weightsNuclear(WeightVector::Ones(1)), algo() {}
+		ReweightedResult() : niters(0), good(false), algo() {}
 	};
 
-	Reweighted(Algorithm &algo, t_ReweighteeMat const &reweighteeL21, t_ReweighteeVec const &reweighteeNuclear)
-	: algo_(algo), reweighteeL21_(reweighteeL21), reweighteeNuclear_(reweighteeNuclear), itermax_(std::numeric_limits<t_uint>::max()),
-	  min_delta_(0e0), is_converged_(), update_delta_([](Real delta) { return 1e-1 * delta; }), decomp_(psi::mpi::Decomposition(false)) {}
+	Reweighted(Algorithm &algo, t_ReweighteeMat const &reweighteeL21)
+	: algo_(algo), reweighteeL21_(reweighteeL21), itermax_(std::numeric_limits<t_uint>::max()),
+	  min_delta_(0e0), is_converged_(), update_delta_([](Real delta) { return 1e-1 * delta; }) {}
 
 	//! Underlying "inner-loop" algorithm
 	Algorithm &algorithm() { return algo_; }
@@ -96,19 +95,6 @@ public:
 	//! Forwards to the reweightee function
 	XMatrix reweighteeL21(XMatrix const &x) { return reweighteeL21()(algorithm(), x); }
 
-	//! Function that needs to be Wideband
-	//! \details E.g. \f$x\f$ for the nuclear norm.
-	Reweighted<Algorithm> &reweighteeNuclear(t_ReweighteeVec const &rw) {
-		reweighteeNuclear_ = rw;
-		return *this;
-	}
-
-	//! Function that needs to be Wideband
-	t_ReweighteeVec const &reweighteeNuclear() const { return reweighteeNuclear_; }
-
-	//! Forwards to the reweightee function
-	XVector reweighteeNuclear(XMatrix const &x) { return reweighteeNuclear()(algorithm(), x); }
-
 	//! Maximum number of Wideband iterations
 	t_uint itermax() const { return itermax_; }
 	Reweighted &itermax(t_uint i) {
@@ -131,12 +117,6 @@ public:
 	}
 	bool is_converged(XMatrix const &x) const { return is_converged() ? is_converged()(x) : false; }
 
-	psi::mpi::Decomposition decomp() const { return decomp_; }
-	Reweighted &decomp(psi::mpi::Decomposition decomp) {
-		decomp_ = decomp;
-		return *this;
-	}
-
 	//! \brief Performs reweighting
 	//! \details This overload will compute an initial result without initial weights set to one.
 	template <class INPUT>
@@ -150,14 +130,17 @@ public:
 	//! Reweighted algorithm, from prior call to inner-algorithm
 	ReweightedResult operator()(typename Algorithm::DiagnosticAndResult const &warm);
 	//! Reweighted algorithm, from prior call to reweighting algorithm
-	ReweightedResult operator()(ReweightedResult const &warm);
+	ReweightedResult operator()(ReweightedResult const &warm, bool no_warm = false);
 
 	//! Updates delta
 	Real update_delta(Real delta) const { return update_delta()(delta); }
 	//! Updates delta
 	t_DeltaUpdate const &update_delta() const { return update_delta_; }
 	//! Updates delta
-	Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) const { return update_delta_ = ud; }
+	Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) {
+		update_delta_ = ud;
+		return *this;
+	}
 
 protected:
 	//! Inner loop algorithm
@@ -165,7 +148,6 @@ protected:
 	//! \brief Function that is subject to reweighting
 	//! \details E.g. \f$Ψ^Tx\f$. Note that l1-norm is not applied here.
 	t_ReweighteeMat reweighteeL21_;
-	t_ReweighteeVec reweighteeNuclear_;
 	//! Maximum number of Wideband iterations
 	t_uint itermax_;
 	//! \brief Lower limit for delta
@@ -174,8 +156,6 @@ protected:
 	t_IsConverged is_converged_;
 	//! Updates delta at each turn
 	t_DeltaUpdate update_delta_;
-	//! Decomposition object
-	psi::mpi::Decomposition decomp_;
 };
 
 template <class ALGORITHM>
@@ -191,8 +171,8 @@ enable_if<not(std::is_same<INPUT, typename ALGORITHM::DiagnosticAndResult>::valu
 
 template <class ALGORITHM>
 typename Reweighted<ALGORITHM>::ReweightedResult Reweighted<ALGORITHM>::operator()() {
-	Algorithm algo = algorithm();
-	return operator()(algo());
+        ReweightedResult result = ReweightedResult();
+	return operator()(result, true);
 }
 
 template <class ALGORITHM>
@@ -200,15 +180,12 @@ typename Reweighted<ALGORITHM>::ReweightedResult Reweighted<ALGORITHM>::
 operator()(typename Algorithm::DiagnosticAndResult const &warm) {
 	ReweightedResult result;
 	result.algo = warm;
-	result.weightsL21 = result.algo.weightsL21;
-	result.weightsNuclear =  result.algo.weightsNuclear;
-
-	return operator()(result);
+	return (result);
 }
 
 template <class ALGORITHM>
 typename Reweighted<ALGORITHM>::ReweightedResult Reweighted<ALGORITHM>::
-operator()(ReweightedResult const &warm) {
+operator()(ReweightedResult const &warm, bool no_warm) {
 
 	double temptime, time1, time2, time3, time4;
 	time1 = 0;
@@ -216,79 +193,86 @@ operator()(ReweightedResult const &warm) {
 	time3 = 0;
 	time4 = 0;
 
-	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
+	if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
 		PSI_HIGH_LOG("Starting wideband re-weighting scheme");
 	}
 	// Copies inner algorithm, so that operator() can be constant
 	Algorithm algo(algorithm());
-	ReweightedResult result(warm);
+	ReweightedResult result;
+        result = ReweightedResult(warm);
 
-	// We update delta first here because the first call to re-weighted runs the algo before it
-	// actually gets to here, so we need to take that into account.
-	Real delta = std::max(min_delta(), update_delta(warm.algo.delta));
+	Real delta;
 
-	if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1 and decomp().my_number_of_root_wavelets() != 0){
-		delta = decomp().my_root_wavelet_comm().broadcast(delta, decomp().global_comm().root_id());
-	}
-	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
-		PSI_HIGH_LOG("-   Initial delta: {}", delta);
-		PSI_HIGH_LOG("-   Starting re-weighting iteration: {}", warm.algo.current_reweighting_iter);
+	if(no_warm){
+		delta = 1;
+	}else{
+		delta = warm.algo.delta;
 	}
 
-	for(result.niters = 0; result.niters < itermax(); ++result.niters) {
-		//! Remove the adaptive_epsilon_start restriction after the first re-weighting iteration.
-		//! This allows restarting from saved runs without forcing the restriction to be undertaken multiple times.
-		if(result.niters >= 1){
-			algo.algorithm().adaptive_epsilon_start(0);
-		}
-		if((!decomp().parallel_mpi() or decomp().global_comm().is_root()) and result.niters != 0){
-			PSI_HIGH_LOG("Re-weighting iteration {}/{} ", result.niters, itermax());
-			PSI_HIGH_LOG("  - delta: {}", delta);
-		}
+	if(algorithm().algorithm().decomp().parallel_mpi() and algorithm().algorithm().decomp().my_root_wavelet_comm().size() != 1 and algorithm().algorithm().decomp().my_number_of_root_wavelets() != 0){
+		delta = algorithm().algorithm().decomp().my_root_wavelet_comm().broadcast(delta, algorithm().algorithm().decomp().my_root_wavelet_comm().root_id());
+	}
+	if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
+		PSI_HIGH_LOG("-   Re-weighting iteration: {}", warm.algo.current_reweighting_iter);
+		PSI_HIGH_LOG("  - delta: {}", delta);
+	}
 
-		psi::Matrix<t_complex> partial;
+	for(result.niters = 0; result.niters <= itermax(); ++result.niters) {
 
 
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime();
 #endif
-		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
-			psi::Matrix<t_complex> local_x;
-			if(decomp().my_root_wavelet_comm().size() != 1){
-				local_x = decomp().my_root_wavelet_comm().broadcast(result.algo.x, decomp().global_comm().root_id());
-				partial = reweighteeL21(local_x);
-			}else{
-				partial = reweighteeL21(result.algo.x);
-			}
-			if(decomp().parallel_mpi() and decomp().my_number_of_root_wavelets() != 0){
-				decomp().my_root_wavelet_comm().distributed_sum(partial, decomp().global_comm().root_id());
+		if(no_warm and result.niters == 0){
+		  result.algo = algo();
+		}else{
+		  result.algo = algo(result.algo);
+		}
+
+		bool good_result = false;
+
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
+			if(is_converged(result.algo.x)) {
+				PSI_HIGH_LOG("Re-weighting scheme converged in {} iterations", result.niters);
+				good_result = true;
 			}
 		}
+		good_result = algorithm().algorithm().decomp().global_comm().broadcast(good_result, algorithm().algorithm().decomp().global_comm().root_id());
 
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime() - temptime;
 		time1 += temptime;
 #endif
 
+		if(good_result){
+			result.good = true;
+			break;
+		}
+                
+		//! Remove the adaptive_epsilon_start restriction after the first re-weighting iteration.
+		//! This allows restarting from saved runs without forcing the restriction to be undertaken multiple times.
+		if(result.niters >= 1){
+			algo.algorithm().adaptive_epsilon_start(0);
+		}
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
+			PSI_HIGH_LOG("Re-weighting iteration {}/{} ", result.niters, itermax());
+			PSI_HIGH_LOG("  - delta: {}", delta);
+		}
+
+		psi::Matrix<t_complex> partial;
+
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime();
 #endif
-
-		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
-			result.weightsNuclear = delta / (delta + reweighteeNuclear(result.algo.x).array().abs());
-			result.algo.weightsNuclear = result.weightsNuclear;
-			result.algo.delta = delta;
-			result.algo.current_reweighting_iter = result.niters;
-		}
-
-		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
-			result.weightsL21 = delta / (delta + partial.rowwise().norm().array());
-			result.algo.weightsL21 = result.weightsL21;
-		}
-
-		if(decomp().parallel_mpi()){
-			//! Copy the global weights collected by the root to all processes so they can update their weights for subsequent runs.
-			decomp().template distribute_l21_weights<Vector<Real>>(result.weightsL21, result.weightsL21, result.algo.image_size);
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().my_number_of_root_wavelets() != 0){
+			psi::Matrix<t_complex> local_x;
+			if(algorithm().algorithm().decomp().my_root_wavelet_comm().size() != 1){
+				local_x = algorithm().algorithm().decomp().my_root_wavelet_comm().broadcast(result.algo.x, algorithm().algorithm().decomp().my_root_wavelet_comm().root_id());
+				partial = reweighteeL21(local_x);
+			}else{
+				partial = reweighteeL21(result.algo.x);
+			}
+			result.algo.weightsL21 = delta / (delta + partial.rowwise().norm().array());
 		}
 
 #ifdef PSI_OPENMP
@@ -299,7 +283,14 @@ operator()(ReweightedResult const &warm) {
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime();
 #endif
-		result.algo = algo(result.algo);
+
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
+			PSI_HIGH_LOG("Norm of sigma in reweighting: {}", result.algo.sigma.stableNorm());
+			result.algo.weightsNuclear = delta / (delta + result.algo.sigma.array().abs());
+			result.algo.delta = delta;
+			result.algo.current_reweighting_iter = result.niters;
+		}
+
 
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime() - temptime;
@@ -309,26 +300,12 @@ operator()(ReweightedResult const &warm) {
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime();
 #endif
-		bool good_result = false;
-
-		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
-			if(is_converged(result.algo.x)) {
-				PSI_HIGH_LOG("Re-weighting scheme converged in {} iterations", result.niters);
-				good_result = true;
-			}
-		}
-		good_result = decomp().global_comm().broadcast(good_result, decomp().global_comm().root_id());
-		if(good_result){
-			result.good = true;
-			break;
-		}
-		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
 			delta = std::max(min_delta(), update_delta(delta));
 		}
-		if(decomp().parallel_mpi() and decomp().my_root_wavelet_comm().size() != 1 and decomp().my_number_of_root_wavelets() != 0){
-			delta = decomp().my_root_wavelet_comm().broadcast(delta, decomp().global_comm().root_id());
+		if(algorithm().algorithm().decomp().parallel_mpi() and algorithm().algorithm().decomp().my_root_wavelet_comm().size() != 1 and algorithm().algorithm().decomp().my_number_of_root_wavelets() != 0){
+			delta = algorithm().algorithm().decomp().my_root_wavelet_comm().broadcast(delta, algorithm().algorithm().decomp().my_root_wavelet_comm().root_id());
 		}
-
 
 #ifdef PSI_OPENMP
 		temptime = omp_get_wtime() - temptime;
@@ -340,14 +317,16 @@ operator()(ReweightedResult const &warm) {
 	if(not is_converged()){
 		result.good = true;
 	}else if(not result.good){
-		if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
+		if(!algorithm().algorithm().decomp().parallel_mpi() or algorithm().algorithm().decomp().global_comm().is_root()){
 			PSI_ERROR("Re-weighting scheme did not converge in {} iterations", itermax());
 		}
 	}
 
-	PSI_HIGH_LOG("{} ReweightTime: 1: {} 2: {} 3: {} 4: {}",
-			decomp().global_comm().rank(),
-			(float)time1, (float)time2, (float)time3, (float)time4);
+	if(algorithm().algorithm().decomp().global_comm().is_root()){
+		PSI_HIGH_LOG("{} ReweightTime: 1: {} 2: {} 3: {} 4: {}",
+				algorithm().algorithm().decomp().global_comm().rank(),
+				(float)time1, (float)time2, (float)time3, (float)time4);
+	}
 
 	return result;
 }
@@ -355,9 +334,8 @@ operator()(ReweightedResult const &warm) {
 //! Factory function to create an l0-approximation by reweighting an l1 norm
 template <class ALGORITHM>
 Reweighted<ALGORITHM>
-reweighted(ALGORITHM const &algo, typename Reweighted<ALGORITHM>::t_ReweighteeMat const &reweighteeL21,
-		typename Reweighted<ALGORITHM>::t_ReweighteeVec const &reweighteeNuclear) {
-	return {algo, reweighteeL21, reweighteeNuclear};
+reweighted(ALGORITHM const &algo, typename Reweighted<ALGORITHM>::t_ReweighteeMat const &reweighteeL21) {
+	return {algo, reweighteeL21};
 }
 
 template <class SCALAR> class PrimalDualWideband;
@@ -365,7 +343,6 @@ template <class ALGORITHM> class PositiveQuadrant;
 template <class T>
 Eigen::CwiseUnaryOp<const details::ProjectPositiveQuadrant<typename T::Scalar>, const T>
 positive_quadrant(Eigen::DenseBase<T> const &input);
-
 
 template <class SCALAR> class PrimalDualWidebandBlocking;
 template <class SCALAR>
@@ -378,25 +355,16 @@ reweighted(PrimalDualWidebandBlocking<SCALAR> &algo) {
 
 	auto reweighteeL21
 	= [](Algorithm const &posq, typename RW::XMatrix const &x) -> typename RW::XMatrix {
-		typename RW::XMatrix Y(posq.algorithm().image_size()*posq.algorithm().levels()[0], x.cols());
-
+		typename RW::XMatrix Y(posq.algorithm().image_size()*posq.algorithm().decomp().my_number_of_root_wavelets(), x.cols());
 		for (int l = 0; l < x.cols(); ++l){
-			Y.col(l) = static_cast<typename RW::XVector>(posq.algorithm().Psi()[0].adjoint() * x.col(l));
+			Y.col(l) = static_cast<typename RW::XVector>(posq.algorithm().Psi_Root().adjoint() * x.col(l));
 		}
 		return Y;
 
 	};
 
 
-	auto reweighteeNuclear
-	= [](Algorithm const &posq, typename RW::XMatrix const &x) -> typename RW::XVector {
-		typename Eigen::BDCSVD<typename RW::XMatrix> svd(x, Eigen::ComputeThinU | Eigen::ComputeThinV);
-		auto s = svd.singularValues();
-		return s;
-	};
-
-
-	return {posq, reweighteeL21, reweighteeNuclear};
+	return {posq, reweighteeL21};
 }
 
 

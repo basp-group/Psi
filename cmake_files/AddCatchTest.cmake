@@ -13,7 +13,8 @@ function(common_catch_main)
   endif()
   file(WRITE "${CMAKE_BINARY_DIR}/common_catch_main.cc"
     "#define CATCH_CONFIG_MAIN\n"
-    "#include \"catch.hpp\"\n"
+    "#include <catch2/catch.hpp>\n"
+    # "#include \"catch.hpp\"\n"
   )
   add_library(common_catch_main_object OBJECT "${CMAKE_BINARY_DIR}/common_catch_main.cc")
   if(CATCH_INCLUDE_DIR)

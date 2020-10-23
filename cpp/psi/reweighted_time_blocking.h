@@ -1,4 +1,4 @@
-#ifndef PSI_REWEIGHTED_TIME_BLOCKING__H
+#ifndef PSI_REWEIGHTED_TIME_BLOCKING_H
 #define PSI_REWEIGHTED_TIME_BLOCKING_H
 
 #include "psi/linear_transform.h"
@@ -152,7 +152,10 @@ public:
 	//! Updates delta
 	t_DeltaUpdate const &update_delta() const { return update_delta_; }
 	//! Updates delta
-	Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) const { return update_delta_ = ud; }
+	Reweighted<Algorithm> update_delta(t_DeltaUpdate const &ud) {
+		update_delta_ = ud;
+		return *this;
+	}
 
 protected:
 	//! Inner loop algorithm
@@ -213,10 +216,10 @@ operator()(ReweightedResult const &warm) const {
 
 	if(!decomp().parallel_mpi() or decomp().global_comm().is_root()){
 		PSI_LOW_LOG("-   Initial delta: {}", delta);
-		PSI_LOW_LOG("-   Starting re-weighting iteration: {}", warm.algo.current_reweighting_iter);
+		PSI_LOW_LOG("-   Re-weighting iteration: {}", warm.algo.current_reweighting_iter);
 	}
 
-	for(result.niters = warm.algo.current_reweighting_iter; result.niters < itermax(); ++result.niters) {
+	for(result.niters = warm.algo.current_reweighting_iter; result.niters <= itermax(); ++result.niters) {
 		//! Remove the adaptive_epsilon_start restriction after the first re-weighting iteration
 		//! This allows restarting from saved runs without forcing the restriction to be undertaken multiple times.
 		if(result.niters >= 1){
@@ -230,7 +233,7 @@ operator()(ReweightedResult const &warm) const {
 		if(!decomp().parallel_mpi() or decomp().my_number_of_root_wavelets() != 0){
 			if(decomp().my_root_wavelet_comm().size() != 1){
 				XVector local_x;
-				local_x = decomp().my_root_wavelet_comm().broadcast(result.algo.x, decomp().global_comm().root_id());
+				local_x = decomp().my_root_wavelet_comm().broadcast(result.algo.x, decomp().my_root_wavelet_comm().root_id());
 				result.weights = delta / (delta + reweightee(local_x).array().abs());
 			}else{
 				result.weights = delta / (delta + reweightee(result.algo.x).array().abs());
@@ -257,7 +260,7 @@ operator()(ReweightedResult const &warm) const {
 			delta = std::max(min_delta(), update_delta(delta));
 		}
 		if(decomp().parallel_mpi() and decomp().my_frequencies()[0].wavelet_comm.size() != 1 and decomp().my_frequencies()[0].number_of_wavelets != 0){
-			delta = decomp().my_frequencies()[0].wavelet_comm.broadcast(delta, decomp().global_comm().root_id());
+			delta = decomp().my_frequencies()[0].wavelet_comm.broadcast(delta, decomp().my_frequencies()[0].wavelet_comm.root_id());
 		}
 	}
 	// result is always good if no convergence function is defined

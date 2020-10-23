@@ -3,6 +3,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <ctime>
 #include <Eigen/Eigenvalues>
 
 #include <psi/linear_transform.h>

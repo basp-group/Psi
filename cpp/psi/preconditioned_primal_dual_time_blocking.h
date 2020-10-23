@@ -125,13 +125,13 @@ void PreconditionedPrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out,
 				x_hat_rows = x_hat.rows();
 				x_hat_cols = x_hat.cols();
 			}
-			x_hat_rows = decomp().my_frequencies()[0].freq_comm.broadcast(x_hat_rows, decomp().global_comm().root_id());
-			x_hat_cols = decomp().my_frequencies()[0].freq_comm.broadcast(x_hat_cols, decomp().global_comm().root_id());
+			x_hat_rows = decomp().my_frequencies()[0].freq_comm.broadcast(x_hat_rows, decomp().my_frequencies()[0].freq_comm.root_id());
+			x_hat_cols = decomp().my_frequencies()[0].freq_comm.broadcast(x_hat_cols, decomp().my_frequencies()[0].freq_comm.root_id());
 		}
 		if(!decomp().global_comm().is_root()){
 			x_hat = Matrix<t_complex>(x_hat_rows, x_hat_cols);
 		}
-		x_hat =  decomp().my_frequencies()[0].freq_comm.broadcast(x_hat, decomp().global_comm().root_id());
+		x_hat =  decomp().my_frequencies()[0].freq_comm.broadcast(x_hat, decomp().my_frequencies()[0].freq_comm.root_id());
 	}
 
 	// Git_v required on each process, but only need as many as the number of Phi's a process has.
@@ -174,7 +174,7 @@ void PreconditionedPrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out,
 
 	// NEED TO REDUCE Phit_v to root here.
 	if(decomp().parallel_mpi()){
-		decomp().my_frequencies()[0].freq_comm.distributed_sum(Phit_v,decomp().global_comm().root_id());
+		decomp().my_frequencies()[0].freq_comm.distributed_sum(Phit_v,decomp().my_frequencies()[0].freq_comm.root_id());
 	}
 
 	Matrix<t_complex> out_hat;
@@ -225,14 +225,14 @@ void PreconditionedPrimalDualTimeBlocking<SCALAR>::iteration_step(t_Vector &out,
 				out_hat_rows = out_hat.rows();
 				out_hat_cols = out_hat.cols();
 			}
-			out_hat_rows = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat_rows, decomp().global_comm().root_id());
-			out_hat_cols = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat_cols, decomp().global_comm().root_id());
+			out_hat_rows = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat_rows, decomp().my_frequencies()[0].freq_comm.root_id());
+			out_hat_cols = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat_cols, decomp().my_frequencies()[0].freq_comm.root_id());
 		}
 		if(!decomp().global_comm().is_root()){
 			out_hat = Matrix<t_complex>(out_hat_rows, out_hat_cols);
 		}
 
-		out_hat = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat, decomp().global_comm().root_id());
+		out_hat = decomp().my_frequencies()[0].freq_comm.broadcast(out_hat, decomp().my_frequencies()[0].freq_comm.root_id());
 	}
 
 	//out_hat needs to be sent to all measurement operator processes

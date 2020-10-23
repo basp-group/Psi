@@ -161,7 +161,7 @@ public:
 		if (target().size() != res_guess.size())
 			PSI_THROW("target and residual vector have inconsistent sizes");
 		if (not static_cast<bool>(is_converged()))
-			PSI_WARN("No convergence function was provided: algorithm will run for {} steps", itermax());
+			PSI_WARN("No convergence function was provided: FB NNLS algorithm will run for {} steps", itermax());
 	}
 
 	//! \brief Calls Forward-Backward
@@ -237,17 +237,17 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector const &res_guess) co
 	t_Vector prev_sol = out;
 
 	for (niters = 0; niters < itermax(); ++niters) {
-		PSI_LOW_LOG("    - Iteration {}/{}", niters, itermax());
+		PSI_LOW_LOG("    - FB NNLS Iteration {}/{}", niters, itermax());
 		iteration_step(out, residual, prev_sol, t);
-		PSI_LOW_LOG("      - Sum of residuals: {}", residual.array().abs().sum()); // to be modified ?
+		PSI_LOW_LOG("      - FB NNLS Sum of residuals: {}", residual.array().abs().sum()); // to be modified ?
 
 		objectives.second = objectives.first;
 		objectives.first = psi::l2_norm(residual);
 		Real const relative_objective
 		= std::abs(objectives.first - objectives.second) / objectives.first;
-		PSI_LOW_LOG("    - objective: obj value = {}, rel obj = {}", objectives.first,
+		PSI_LOW_LOG("    - FB NNLS objective: obj value = {}, rel obj = {}", objectives.first,
 				relative_objective);
-		PSI_LOW_LOG("Iteration: {}\tresidual norm: {}\trel_obj: {}", niters, objectives.first,relative_objective);
+		PSI_LOW_LOG("FB NNLS Iteration: {}\tresidual norm: {}\trel_obj: {}", niters, objectives.first,relative_objective);
 
 		auto const user = (not has_user_convergence) or is_converged(out);
 		// auto const res = residual_convergence() <= 0e0 or residual_norm < residual_convergence();
@@ -255,13 +255,13 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector const &res_guess) co
 
 		converged = user and rel; //and res
 		if (converged) {
-			PSI_MEDIUM_LOG("    - converged in {} of {} iterations", niters, itermax());
+			PSI_MEDIUM_LOG("    - FB NNLS converged in {} of {} iterations", niters, itermax());
 			break;
 		}
 	}
 	// check function exists, otherwise, don't know if convergence is meaningful
 	if (not converged)
-		PSI_ERROR("    - did not converge within {} iterations", itermax());
+		PSI_ERROR("    - FB NNLS did not converge within {} iterations", itermax());
 
 	return {niters, converged, std::move(residual)};
 }

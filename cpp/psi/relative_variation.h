@@ -40,7 +40,7 @@ public:
   }
   //! Name that gets interpolated into the log's output
   std::string const &name() const { return name_; }
-  RelativeVariation const &name(std::string const &name) const {
+  RelativeVariation const &name(std::string const &name) {
     name_ = name;
     return *this;
   }
@@ -88,7 +88,7 @@ public:
 
   //! Name that gets interpolated into the log's output
   std::string const &name() const { return name_; }
-  ScalarRelativeVariation const &name(std::string const &name) const {
+  ScalarRelativeVariation const &name(std::string const &name) {
     name_ = name;
     return *this;
   }

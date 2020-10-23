@@ -52,11 +52,15 @@ if (MKLROOT_PATH)
 	# find specific library files
 		
 	find_library(LIB_MKL_RT NAMES mkl_rt HINTS ${MKL_LIBRARY_DIR})
+        find_library(LIB_MKL_CORE NAMES mkl_core HINTS ${MKL_LIBRARY_DIR})
+        find_library(LIB_MKL_SEQ NAMES mkl_sequential HINTS ${MKL_LIBRARY_DIR})
 	find_library(LIB_PTHREAD NAMES pthread)	
 	
 endif (MKLROOT_PATH)
 
 set(MKL_LIBRARIES
+        ${LIB_MKL_CORE}
+        ${LIB_MKL_SEQ}
 	${LIB_MKL_RT} 
 	${LIB_PTHREAD})
 	
@@ -66,10 +70,12 @@ include(FindPackageHandleStandardArgs)
 
 find_package_handle_standard_args(MKL DEFAULT_MSG 
     MKL_LIBRARY_DIR
+    LIB_MKL_CORE
+    LIB_MKL_SEQ
     LIB_MKL_RT
     LIB_PTHREAD
     MKL_INCLUDE_DIR)
     
-mark_as_advanced(LIB_MKL_RT LIB_PTHREAD MKL_INCLUDE_DIR)
+mark_as_advanced(LIB_MKL_CORE LIB_MKL_SEQ LIB_MKL_RT LIB_PTHREAD MKL_INCLUDE_DIR)
 
 

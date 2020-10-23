@@ -3,6 +3,7 @@
 #include <functional>
 #include <iostream>
 #include <random>
+#include <ctime>
 #include <vector>
 #include <Eigen/Eigenvalues>
 #include <string> // for std::to_string
