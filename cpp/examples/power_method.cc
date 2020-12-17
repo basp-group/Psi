@@ -12,7 +12,7 @@ int main(int, char const **) {
       = psi::Matrix<uint8_t>::Identity(N, N).cast<Scalar>() * 100 + psi::Matrix<Scalar>(N, N);
 
   // the linear transform wraps the matrix into something the power-method understands
-  auto const lt = psi::linear_transform(A.cast<psi::t_complex>());
+  auto lt = psi::linear_transform(A.cast<psi::t_complex>());
   // instanciate the power method
   auto const pm = psi::algorithm::PowerMethod<psi::t_complex>().tolerance(1e-12);
   // call it

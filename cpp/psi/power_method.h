@@ -103,9 +103,9 @@ public:
   PSI_MACRO(tolerance, Real);
 #undef PSI_MACRO
 
-  DiagnosticAndResult AtA(std::shared_ptr<t_LinearTransform const>&A, t_Vector const &input) const;
+  DiagnosticAndResult AtA(std::shared_ptr<t_LinearTransform>&A, t_Vector const &input) const;
   //! \brief Calls the power method for A.adjoint() * A
-  DiagnosticAndResult AtA(t_LinearTransform const &A, t_Vector const &input) const;
+  DiagnosticAndResult AtA(t_LinearTransform &A, t_Vector const &input) const;
 
   //! \brief Calls the power method for A, with A a matrix
   template <class DERIVED>
@@ -119,8 +119,8 @@ protected:
 
 template <class SCALAR>
 typename PowerMethod<SCALAR>::DiagnosticAndResult
-PowerMethod<SCALAR>::AtA(std::shared_ptr<t_LinearTransform const>& A, t_Vector const &input) const {
-  std::weak_ptr<t_LinearTransform const> weak_A(A);
+PowerMethod<SCALAR>::AtA(std::shared_ptr<t_LinearTransform>& A, t_Vector const &input) const {
+  std::weak_ptr<t_LinearTransform> weak_A(A);
   auto const op = [weak_A](t_Vector &out, t_Vector const &input) -> void {
 	auto A = weak_A.lock();
 	if(A){
@@ -134,7 +134,7 @@ PowerMethod<SCALAR>::AtA(std::shared_ptr<t_LinearTransform const>& A, t_Vector c
 
 template <class SCALAR>
 typename PowerMethod<SCALAR>::DiagnosticAndResult
-PowerMethod<SCALAR>::AtA(t_LinearTransform const &A, t_Vector const &input) const {
+PowerMethod<SCALAR>::AtA(t_LinearTransform &A, t_Vector const &input) const {
   auto const op = [&A](t_Vector &out, t_Vector const &input) -> void {
     out = A.adjoint() * (A * input).eval();
   };

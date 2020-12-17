@@ -78,7 +78,7 @@ public:
 	// If in parallel target, Phi, and l2ball_epsilon need to be distributed appropriately
 
 	template <class T>
-	PrimalDualTimeBlocking(EigenCell<T> const &target, const t_uint &image_size, const Vector<Real> &l2ball_epsilon, std::vector<std::shared_ptr<const t_LinearTransform>>& Phi, std::vector<Vector<Real>> const &Ui)
+	PrimalDualTimeBlocking(EigenCell<T> const &target, const t_uint &image_size, const Vector<Real> &l2ball_epsilon, std::vector<std::shared_ptr<t_LinearTransform>>& Phi, std::vector<Vector<Real>> const &Ui)
 	: itermax_(std::numeric_limits<t_uint>::max()), is_converged_(), kappa_(1.), tau_(0.49), sigma1_(1.),
 	  sigma2_(1.), levels_(1), l2ball_epsilon_(l2ball_epsilon), l1_proximal_weights_(Vector<Real>::Zero(1)),
 	  Phi_(Phi), Psi_(linear_transform_identity<Scalar>()), image_size_(image_size),
@@ -128,7 +128,7 @@ public:
 	//! A function verifying convergence
 	PSI_MACRO(is_converged, t_IsConverged);
 	//! Measurement operator
-	PSI_MACRO(Phi, std::vector<std::shared_ptr<const t_LinearTransform>>);
+	PSI_MACRO(Phi, std::vector<std::shared_ptr<t_LinearTransform>>);
 	//! Analysis operator
 	PSI_MACRO(Psi, t_LinearTransform);
 	//! Convergence of the residuals

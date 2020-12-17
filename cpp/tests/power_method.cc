@@ -26,7 +26,7 @@ TEST_CASE("Power Method") {
   auto const pm = algorithm::PowerMethod<t_complex>().tolerance(1e-12);
 
   SECTION("AtA") {
-    auto const lt = linear_transform(A.cast<t_complex>());
+    auto lt = linear_transform(A.cast<t_complex>());
     auto const result = pm.AtA(lt, input);
     CHECK(result.good);
     CAPTURE(eigenvalue);

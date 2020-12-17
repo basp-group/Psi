@@ -155,7 +155,7 @@ public:
 	std::tuple<t_Vector, t_Vector> initial_guess() const {
 		std::tuple<t_Vector, t_Vector> guess;
 		proximal::L2Ball<Scalar> l2ball_proximal = proximal::L2Ball<Scalar>(l2ball_epsilon());
-		std::get<0>(guess) = l2ball_proximal(0, target() - l2_ball_center()) + l2_ball_center(); // vérifier si ok
+		std::get<0>(guess) = t_Vector::Zero(target().size()); //l2ball_proximal(target() - l2_ball_center()) + l2_ball_center();
 		std::get<1>(guess) = std::get<0>(guess) - target();
 		return guess;
 	}
@@ -180,7 +180,7 @@ public:
 	//! \param[out] out: Output vector x
 	//! \param[in] guess: initial guess
 	//! \param[in] residuals: initial residuals
-	Diagnostic operator()(t_Vector &out, t_Vector const &guess, t_Vector const &res) const;  //to be modified
+	Diagnostic operator()(t_Vector &out, t_Vector const &guess, t_Vector const &res) const;
 
 	//! Vector of measurements
 	t_Vector target_;
@@ -191,12 +191,11 @@ public:
 template <class SCALAR>
 void ForwardBackward<SCALAR>::iteration_step(t_Vector &out, t_Vector &residual, Real &mu) const {
 
-	t_Vector prev_sol = out;
 	proximal::L2Ball<Scalar> l2ball_proximal = proximal::L2Ball<Scalar>(l2ball_epsilon());
 
 	// v_t = l2ball_prox(v_t-1 - mu*Ui*(v_t-1 - z))
-	t_Vector temp = prev_sol - mu*(Ui().array()*(prev_sol - target()).array()).matrix();
-	out = l2ball_proximal(0, temp - l2_ball_center()) + l2_ball_center();
+	t_Vector temp = out - mu*(Ui().array()*(residual).array()).matrix(); // prev_sol - target()
+	out = l2ball_proximal(temp - l2_ball_center()) + l2_ball_center();
 	residual= out - target();
 }
 
@@ -218,34 +217,22 @@ operator()(t_Vector &out, t_Vector const &x_guess, t_Vector const &res_guess) co
 
 	out = x_guess;
 	t_uint niters(0);
-	Real mu;
-	Vector<Real> weights(1);
-	weights << 1.0;
-
-	std::pair<Real, Real> objectives{psi::l2_norm(out, Ui()), 0};
-	// set_mu(mu);
-	mu = 1/(std::pow(Ui().maxCoeff(),2)); // à revoir...
+	Real mu = 1/(std::pow(Ui().maxCoeff(),2));
 
 	for(niters = 0; niters < itermax(); ++niters) {
+		t_Vector x_old = out;
 		PSI_LOW_LOG("    - FB Iteration {}/{}", niters, itermax());
 		iteration_step(out, residual, mu);
-		PSI_LOW_LOG("      - FB Sum of residuals: {}", residual.array().abs().sum()); // to be modified ?
+		// PSI_LOW_LOG("      - FB Sum of residuals: {}", residual.array().abs().sum()); // to be modified ?
 
-		objectives.second = objectives.first;
-		objectives.first = psi::l2_norm(out, Ui());
 		Real const relative_objective
-		= std::abs(objectives.first - objectives.second) / objectives.first;
-		PSI_LOW_LOG("    - FB objective: obj value = {}, rel obj = {}", objectives.first,
-				relative_objective);
-
-		// auto const residual_norm = psi::l2_norm(residual, weights);
-		// PSI_LOW_LOG("      - residual norm = {}, residual convergence = {}", residual_norm, residual_convergence());
+		= (out - x_old).stableNorm() / out.stableNorm();
+		PSI_LOW_LOG("    - FB objective: rel obj = {}", relative_objective);
 
 		auto const user = (not has_user_convergence) or is_converged(out);
-		// auto const res = residual_convergence() <= 0e0 or residual_norm < residual_convergence();
 		auto const rel = relative_variation() <= 0e0 or relative_objective < relative_variation();
 
-		converged = user and rel; //and res
+		converged = user and rel;
 		if(converged) {
 			PSI_MEDIUM_LOG("    - FB converged in {} of {} iterations", niters, itermax());
 			break;

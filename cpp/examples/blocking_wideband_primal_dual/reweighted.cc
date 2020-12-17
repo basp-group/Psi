@@ -66,9 +66,9 @@ int main(int argc, char const **argv) {
 
 	PSI_MEDIUM_LOG("Initializing sensing operator");
 	psi::t_uint nmeasure = 0.33 * image.size();
-	std::vector<std::vector<std::shared_ptr<const psi::LinearTransform<psi::Vector<psi::t_complex>>>>> Phi(frequencies);
+	std::vector<std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>>> Phi(frequencies);
 	for(int f=0; f<frequencies; f++){
-		Phi[f] = std::vector<std::shared_ptr<const psi::LinearTransform<psi::Vector<psi::t_complex>>>>(block_number);
+		Phi[f] = std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>>(block_number);
 	}
 	std::vector<std::vector<psi::LinearTransform<psi::Vector<psi::t_complex>>>> Phitemp(frequencies);
 	for(int f=0; f<frequencies; f++){

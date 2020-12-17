@@ -25,7 +25,7 @@ template <class EIGEN> class MatrixAdjointToLinearTransform;
 
 //! Joins together direct and indirect operators
  template <class VECTOR> class LinearTransform : 
-   public details::WrapFunction<VECTOR> , public psi::LinearTransformOperations<VECTOR> {
+   public details::WrapFunction<VECTOR>, public psi::LinearTransformOperations<VECTOR> {
 public:
   //! Type of the wrapped functions
   typedef OperatorFunction<VECTOR> t_Function;

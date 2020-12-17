@@ -89,7 +89,7 @@ public:
 
 	//! Sets up PrimalDualWidebandBlocking
 	template <class T>
-	PrimalDualWidebandBlocking(std::vector<std::vector<Vector<T>>> const &target, const t_uint &image_size, const Vector<Vector<Real>> &l2ball_epsilon, std::vector<std::vector<std::shared_ptr<const t_LinearTransform>>>& Phi, std::vector<std::vector<Vector<Real>>> const &Ui)
+	PrimalDualWidebandBlocking(std::vector<std::vector<Vector<T>>> const &target, const t_uint &image_size, const Vector<Vector<Real>> &l2ball_epsilon, std::vector<std::vector<std::shared_ptr<t_LinearTransform>>>& Phi, std::vector<std::vector<Vector<Real>>> const &Ui)
 	: itermax_(std::numeric_limits<t_uint>::max()), itermin_(0), is_converged_(),
 	  mu_(1.), tau_(1.), kappa1_(1.), kappa2_(1.), kappa3_(1.),
 	  levels_(std::vector<t_uint>(1)), global_levels_(1),
@@ -160,7 +160,7 @@ public:
 	//! A function verifying convergence
 	PSI_MACRO(is_converged, t_IsConverged);
 	//! Measurement operator
-	PSI_MACRO(Phi, std::vector<std::vector<std::shared_ptr<const t_LinearTransform>>>);
+	PSI_MACRO(Phi, std::vector<std::vector<std::shared_ptr<t_LinearTransform>>>);
 	//! Analysis operator
 	PSI_MACRO(Psi, std::vector<t_LinearTransform>);
 	//! Analysis operator just for the root wavelets. This is required to allow parallelisation of the root wavelets separately
@@ -964,7 +964,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		if(decomp().my_frequencies()[f].global_owner == decomp().global_comm().rank()){
 			Vector<t_complex> const temp_data = x_bar_local.col(f).template cast<t_complex>();
 			auto const image_bar = Image<t_complex>::Map(temp_data.data(), Phi()[0][0]->imsizey(), Phi()[0][0]->imsizex());
-			x_hat[freq_root_count] = Phi()[0][0]->FFT(image_bar);
+			x_hat[freq_root_count] = Phi()[f][0]->FFT(image_bar);
 			freq_root_count++;
 		}
 	}
@@ -1053,7 +1053,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 																																															.decomp(decomp());
 
 				v_prox = ellipsoid_prox().x;
-				v[f][t] = temp - v_prox.cwiseProduct(Ui()[f][t]);
+				v[f][t] = temp - v_prox.cwiseProduct(Ui()[f][t]).eval();
 
 			}else{
 
@@ -1088,7 +1088,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 			Matrix<t_complex>  v1 = Matrix<t_complex>::Map(temp_data.data(),
 					Phi()[0][0]->oversample_factor()*Phi()[0][0]->imsizey(),
 					Phi()[0][0]->oversample_factor()*Phi()[0][0]->imsizex());
-			Image<t_complex> im_tmp = Phi()[0][0]->inverse_FFT(v1); //TODO: compute a single FFT over the sum of the blocks
+			Image<t_complex> im_tmp = Phi()[f][t]->inverse_FFT(v1); //TODO: compute a single FFT over the sum of the blocks
 			Vector<t_complex> v_tmp = Vector<t_complex>::Map(im_tmp.data(), im_tmp.size(), 1);
 			temp2_v.col(f) = temp2_v.col(f) + v_tmp;
 		}
@@ -1170,7 +1170,7 @@ void PrimalDualWidebandBlocking<SCALAR>::iteration_step(t_Matrix &out, std::vect
 		if(decomp().my_frequencies()[f].global_owner == decomp().global_comm().rank()){
 			Vector<t_complex> const temp_data = out_local.col(f).template cast<t_complex>();
 			auto const image_out = Image<t_complex>::Map(temp_data.data(), Phi()[0][0]->imsizey(), Phi()[0][0]->imsizex());
-			out_hat[f] = Phi()[0][0]->FFT(image_out);
+			out_hat[f] = Phi()[f][0]->FFT(image_out);
 		}
 	}
 

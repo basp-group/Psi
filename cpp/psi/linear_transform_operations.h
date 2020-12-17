@@ -28,7 +28,7 @@ public:
 	  }
 
 	  virtual Image<t_complex> inverse_FFT(Matrix<t_complex> &ft_vector) const{
-			PSI_HIGH_LOG("Wrong invere FFT routine being called");
+			PSI_HIGH_LOG("Wrong inverse FFT routine being called");
 
 	    return ft_vector;
 	  }
@@ -55,6 +55,17 @@ public:
 			Vector<t_int> out = Vector<t_int>::Ones(0,0);
 	    return out;
 	  }
+
+	  virtual void enable_preconditioning() {
+		  PSI_HIGH_LOG("Wrong enable_preconditioning function called");
+		  return;
+	  }
+
+	  virtual void disable_preconditioning() {
+		  PSI_HIGH_LOG("Wrong disable_preconditioning set function called");
+		  return;
+	  }
+
 };
 
 }

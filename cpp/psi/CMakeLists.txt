@@ -1,11 +1,10 @@
 # list of headers
 set(headers
-  primal_dual_blocking_wideband_serial.h
   primal_dual.h primal_dual_wideband_blocking.h
   primal_dual_time_blocking.h primal_dual_time_blocking_debug.h logging.disabled.h maths.h proximal.h relative_variation.h
   reweighted.h reweighted_wideband.h reweighted_time_blocking.h types.h wrapper.h exception.h linear_transform.h linear_transform_operations.h logging.h positive_quadrant.h
   real_type.h sampling.h power_method.h power_method_wideband.h power_method_blocking.h preconditioned_primal_dual.h primal_dual_time_blocking.h
-  serial_primal_dual_time_blocking.h ${PROJECT_BINARY_DIR}/include/psi/config.h
+  ${PROJECT_BINARY_DIR}/include/psi/config.h
 )
 set(wavelet_headers
   wavelets/direct.h wavelets/indirect.h wavelets/innards.impl.h wavelets/sara.h

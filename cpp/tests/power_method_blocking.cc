@@ -30,7 +30,7 @@ TEST_CASE("Power Method Blocking") {
   auto const pm = algorithm::PowerMethodBlocking<t_complex>().tolerance(1e-12);
 
   SECTION("AtA") {
-    std::vector<std::shared_ptr<const psi::LinearTransform<psi::Vector<psi::t_complex>>>> A(1, std::make_shared<const psi::LinearTransform<psi::Vector<psi::t_complex>>>(linear_transform(B.cast<t_complex>())));
+    std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>> A(1, std::make_shared<psi::LinearTransform<psi::Vector<psi::t_complex>>>(linear_transform(B.cast<t_complex>())));
     // auto const result = psi::algorithm::power_method_wideband<Vector<t_complex>, Matrix<t_complex>>(A, 100, 1e-12, input); // problem
 
     auto const result = pm.AtA(A, input); // 

@@ -107,7 +107,7 @@ public:
 	PSI_MACRO(decomp, psi::mpi::Decomposition);
 #undef PSI_MACRO
 	//! \brief Calls the power method for A.adjoint() * A
-	DiagnosticAndResult AtA(std::vector<std::vector<std::shared_ptr<const t_LinearTransform>>> &A, t_Matrix const &input) const;
+	DiagnosticAndResult AtA(std::vector<std::vector<std::shared_ptr<t_LinearTransform>>> &A, t_Matrix const &input) const;
 
 	//! \brief Calls the power method for A a std::vector, where A[l] are matrices (l < A.size())
 	template <class DERIVED>
@@ -121,7 +121,7 @@ protected:
 
 template <class SCALAR>
 typename PowerMethodWideband<SCALAR>::DiagnosticAndResult
-PowerMethodWideband<SCALAR>::AtA(std::vector<std::vector<std::shared_ptr<const t_LinearTransform>>> &A, t_Matrix const &input) const {
+PowerMethodWideband<SCALAR>::AtA(std::vector<std::vector<std::shared_ptr<t_LinearTransform>>> &A, t_Matrix const &input) const {
 	auto const op = [&A, this](t_Matrix &out, t_Matrix const &input) -> void {
 		for(t_uint f = 0; f < A.size(); ++f){
 			out.col(f).setZero();

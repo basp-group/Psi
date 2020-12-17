@@ -104,7 +104,7 @@ public:
 	PSI_MACRO(decomp, psi::mpi::Decomposition);
 #undef PSI_MACRO
 	//! \brief Calls the power method for A.adjoint() * A
-	DiagnosticAndResult AtA(std::vector<std::shared_ptr<const t_LinearTransform>> &A, t_Vector const &input) const;
+	DiagnosticAndResult AtA(std::vector<std::shared_ptr<t_LinearTransform>> &A, t_Vector const &input) const;
 
 	//! \brief Calls the power method for A, with A a matrix
 	template <class DERIVED>
@@ -119,7 +119,7 @@ protected:
 
 template <class SCALAR>
 typename PowerMethodBlocking<SCALAR>::DiagnosticAndResult
-PowerMethodBlocking<SCALAR>::AtA(std::vector<std::shared_ptr<const t_LinearTransform>> &A, t_Vector const &input) const {
+PowerMethodBlocking<SCALAR>::AtA(std::vector<std::shared_ptr<t_LinearTransform>> &A, t_Vector const &input) const {
 	auto const op = [&A, this](t_Vector &out, t_Vector const &input) -> void {
 		// Only do this on the root process
 		out = t_Vector::Zero(input.size());

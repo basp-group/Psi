@@ -13,13 +13,13 @@ int main(int, char const **) {
       = psi::Matrix<uint8_t>::Identity(N, N).cast<Scalar>() * 100 + psi::Matrix<Scalar>(N, N);
 
   // the linear transform wraps the matrix into something the power-method understands
-  std::vector<std::vector<std::shared_ptr< const psi::LinearTransform<psi::Vector<psi::t_complex>>>>> lt(band_number);
+  std::vector<std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>>> lt(band_number);
   for(int f=0; f<band_number; f++){
-	  lt[f] =  std::vector<std::shared_ptr<const psi::LinearTransform<psi::Vector<psi::t_complex>>>>(1);
+	  lt[f] =  std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>>(1);
   }
 
   for(psi::t_uint f=0; f<band_number; ++f){
-    lt[f].emplace_back(std::make_shared<const psi::LinearTransform<psi::Vector<psi::t_complex>>>(psi::linear_transform(A.cast<psi::t_complex>())));
+    lt[f].emplace_back(std::make_shared<psi::LinearTransform<psi::Vector<psi::t_complex>>>(psi::linear_transform(A.cast<psi::t_complex>())));
   }
 
   // instanciate the power method

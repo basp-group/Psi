@@ -66,7 +66,7 @@ int main(int argc, char const **argv) {
 
 	PSI_HIGH_LOG("Initializing sensing operator");
 	psi::t_uint nmeasure = 0.33 * image.size();
-	std::vector<std::shared_ptr<const psi::LinearTransform<psi::Vector<psi::t_complex>>>> Phi(block_number);
+	std::vector<std::shared_ptr<psi::LinearTransform<psi::Vector<psi::t_complex>>>> Phi(block_number);
 	std::vector<psi::LinearTransform<psi::Vector<psi::t_complex>>> Phitemp(block_number, psi::linear_transform_identity<psi::t_complex>());
 	for(int l = 0; l < block_number; ++l){
 		//! TODO This is likely wrong as tempphi will go out of scope but the shared ptr will still be used. Fix this.

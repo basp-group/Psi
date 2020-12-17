@@ -68,7 +68,7 @@ int main(int argc, char const **argv) {
 
   PSI_HIGH_LOG("Initializing sensing operator");
   psi::t_uint nmeasure = 0.33 * image.size();
-  auto const sampling
+  auto sampling
       = psi::linear_transform<Scalar>(psi::Sampling(image.size(), nmeasure, mersenne));
 
   PSI_HIGH_LOG("Initializing wavelets");
@@ -85,7 +85,7 @@ int main(int argc, char const **argv) {
   //   std::make_tuple(std::string{"DB1"}, 4u)};
   //  auto const nlevels = wavelet.size();
     
-  auto const psi = psi::linear_transform<Scalar>(wavelet, image.rows(), image.cols());
+  auto psi = psi::linear_transform<Scalar>(wavelet, image.rows(), image.cols());
 
   PSI_HIGH_LOG("Computing primal-dual parameters");
   Vector const y0 = sampling * Vector::Map(image.data(), image.size());
